@@ -117,14 +117,22 @@ module emu
 	// 1 - D-/TX
 	// 2..6 - USR2..USR6
 	// Set USER_OUT to 1 to read from USER_IN.
-	input   [6:0] USER_IN,
-	output  [6:0] USER_OUT,
+	output	USER_OSD,
+output	USER_MODE,
+input	[7:0] USER_IN,
+output	[7:0] USER_OUT,
 
 	input         OSD_STATUS
 );
 
 assign ADC_BUS  = 'Z;
-assign USER_OUT = '1;
+
+wire   joy_split, joy_mdsel;
+wire   [5:0] joy_in = {USER_IN[6],USER_IN[3],USER_IN[5],USER_IN[7],USER_IN[1],USER_IN[2]};
+assign USER_OUT  = |status[31:30] ? {3'b111,joy_split,3'b111,joy_mdsel} : '1;
+assign USER_MODE = |status[31:30] ;
+assign USER_OSD  = joydb9md_1[7] & joydb9md_1[5];
+
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z; 
@@ -144,6 +152,8 @@ localparam CONF_STR = {
 	"ATARI5200;;",
 	"-;",
 	"S,CARA52BINROM,Load Cart;",
+	"-;",
+	"OUV,Serial SNAC DB9MD,Off,1 Player,2 Players;",	
 	"-;",
 	"O79,CPU Speed,1x,2x,4x,8x,16x;",
 	"-;",
@@ -174,8 +184,8 @@ pll pll
 wire reset = RESET | status[0] | buttons[1];
 
 //////////////////   HPS I/O   ///////////////////
-wire [20:0] joy_0;
-wire [20:0] joy_1;
+wire [20:0] joy_0_USB;
+wire [20:0] joy_1_USB;
 wire [15:0] joya_0;
 wire [15:0] joya_1;
 wire  [1:0] buttons;
@@ -200,6 +210,50 @@ wire        img_mounted;
 wire [63:0] img_size;
 wire  [7:0] ioctl_index;
 
+wire [20:0] joy_0 = |status[31:30] ? {
+	joydb9md_1[11],// Reset		-> 10* Z
+	joydb9md_1[10],// Pause		-> 9 * Y
+	joydb9md_1[7], // Start 	-> 8 * Start
+	joydb9md_1[9], // btn_#		-> 7 * X 
+	joydb9md_1[5], // btn_*		-> 6 * C
+	joydb9md_1[4], // btn_fire2	-> 5 * B
+	joydb9md_1[6], // btn_fire1	-> 4 * A
+	joydb9md_1[3], // btn_up	-> 3 * U
+	joydb9md_1[2], // btn_down	-> 2 * D
+	joydb9md_1[1], // btn_left	-> 1 * L
+	joydb9md_1[0], // btn_righ	-> 0 * R 
+	} 
+	: joy_0_USB;
+
+wire [20:0] joy_1 =  status[31]    ? {
+	joydb9md_2[11],// Reset		-> 10* Z
+	joydb9md_2[10],// Pause		-> 9 * Y
+	joydb9md_2[7], // Start 	-> 8 * Start
+	joydb9md_2[9], // btn_#		-> 7 * X 
+	joydb9md_2[5], // btn_*		-> 6 * C
+	joydb9md_2[4], // btn_fire2	-> 5 * B
+	joydb9md_2[6], // btn_fire1	-> 4 * A
+	joydb9md_2[3], // btn_up	-> 3 * U
+	joydb9md_2[2], // btn_down	-> 2 * D
+	joydb9md_2[1], // btn_left	-> 1 * L
+	joydb9md_2[0], // btn_righ	-> 0 * R 
+	} 
+	: status[30] ? joy_0_USB : joy_1_USB;
+
+
+reg [15:0] joydb9md_1,joydb9md_2;
+joy_db9md joy_db9md
+(
+  .clk       ( clk_sys    ), //35-50MHz
+  .joy_split ( joy_split  ),
+  .joy_mdsel ( joy_mdsel  ),
+  .joy_in    ( joy_in     ),
+  .joystick1 ( joydb9md_1 ),
+  .joystick2 ( joydb9md_2 )	  
+);
+
+
+
 hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 (
 	.clk_sys(clk_sys),
@@ -207,8 +261,9 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 
 	.conf_str(CONF_STR),
 
-	.joystick_0(joy_0),
-	.joystick_1(joy_1),
+	.joystick_0(joy_0_USB),
+	.joystick_1(joy_1_USB),
+	.joy_raw({joydb9md_1[4],joydb9md_1[6],joydb9md_1[3:0]}),
 	.joystick_analog_0(joya_0),
 	.joystick_analog_1(joya_1),
 
@@ -298,7 +353,7 @@ atari5200top atari5200top
 
 	.CPU_HALT(cpu_halt),
 
-	.PS2_KEY(ps2_key),
+	.ps2_key(ps2_key),
 
 	.JOY1X(ax),
 	.JOY1Y(ay),
