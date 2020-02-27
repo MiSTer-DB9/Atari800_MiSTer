@@ -212,12 +212,12 @@ wire  [7:0] ioctl_index;
 
 wire [20:0] joy_0 = |status[31:30] ? {
 	joydb9md_1[11],// Reset		-> 10* Z
-	joydb9md_1[10],// Pause		-> 9 * Y
+	joydb9md_1[8], // Pause		-> 9 * Mode
 	joydb9md_1[7], // Start 	-> 8 * Start
-	joydb9md_1[9], // btn_#		-> 7 * X 
-	joydb9md_1[5], // btn_*		-> 6 * C
-	joydb9md_1[4], // btn_fire2	-> 5 * B
-	joydb9md_1[6], // btn_fire1	-> 4 * A
+	joydb9md_1[10],// btn_#		-> 7 * Y 
+	joydb9md_1[9], // btn_*		-> 6 * X
+	joydb9md_1[5], // btn_fire2	-> 5 * C
+	joydb9md_1[6] | joydb9md_1[4], // btn_fire1	-> 4 * A or B
 	joydb9md_1[3], // btn_up	-> 3 * U
 	joydb9md_1[2], // btn_down	-> 2 * D
 	joydb9md_1[1], // btn_left	-> 1 * L
@@ -227,12 +227,12 @@ wire [20:0] joy_0 = |status[31:30] ? {
 
 wire [20:0] joy_1 =  status[31]    ? {
 	joydb9md_2[11],// Reset		-> 10* Z
-	joydb9md_2[10],// Pause		-> 9 * Y
+	joydb9md_2[8], // Pause		-> 9 * Mode
 	joydb9md_2[7], // Start 	-> 8 * Start
-	joydb9md_2[9], // btn_#		-> 7 * X 
-	joydb9md_2[5], // btn_*		-> 6 * C
-	joydb9md_2[4], // btn_fire2	-> 5 * B
-	joydb9md_2[6], // btn_fire1	-> 4 * A
+	joydb9md_2[10],// btn_#		-> 7 * Y 
+	joydb9md_2[9], // btn_*		-> 6 * X
+	joydb9md_2[5], // btn_fire2	-> 5 * C
+	joydb9md_2[6] | joydb9md_2[4], // btn_fire1	-> 4 * A or B
 	joydb9md_2[3], // btn_up	-> 3 * U
 	joydb9md_2[2], // btn_down	-> 2 * D
 	joydb9md_2[1], // btn_left	-> 1 * L
