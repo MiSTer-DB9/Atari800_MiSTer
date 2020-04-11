@@ -489,7 +489,7 @@ always@(posedge clk_sys) begin
 								2: io_dout <= status_req[31:16];
 endcase
 // Reading user_io raw joy
-'h37: io_dout <= joy_raw;
+'h0f: io_dout <= joy_raw;
 					
 					//menu mask
 					'h2E: if(byte_cnt == 1) io_dout <= status_menumask;
