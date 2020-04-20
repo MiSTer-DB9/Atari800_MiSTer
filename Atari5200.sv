@@ -118,20 +118,23 @@ module emu
 	// 2..6 - USR2..USR6
 	// Set USER_OUT to 1 to read from USER_IN.
 	output	USER_OSD,
-output	USER_MODE,
-input	[7:0] USER_IN,
-output	[7:0] USER_OUT,
+	output  [1:0] USER_MODE,
+	input	[7:0] USER_IN,
+	output	[7:0] USER_OUT,
 
 	input         OSD_STATUS
 );
 
 assign ADC_BUS  = 'Z;
 
-wire   joy_split, joy_mdsel;
-wire   [5:0] joy_in = {USER_IN[6],USER_IN[3],USER_IN[5],USER_IN[7],USER_IN[1],USER_IN[2]};
-assign USER_OUT  = |status[31:30] ? {3'b111,joy_split,3'b111,joy_mdsel} : '1;
-assign USER_MODE = |status[31:30] ;
-assign USER_OSD  = joydb9md_1[7] & joydb9md_1[5];
+wire         CLK_JOY = CLK_50M;         //Assign clock between 40-50Mhz
+wire   [2:0] JOY_FLAG  = {status[30],status[31],status[29]}; //Assign 3 bits of status (31:29) o (63:61)
+wire         JOY_CLK, JOY_LOAD, JOY_SPLIT, JOY_MDSEL;
+wire   [5:0] JOY_MDIN  = JOY_FLAG[2] ? {USER_IN[6],USER_IN[3],USER_IN[5],USER_IN[7],USER_IN[1],USER_IN[2]} : '1;
+wire         JOY_DATA  = JOY_FLAG[1] ? USER_IN[5] : '1;
+assign       USER_OUT  = JOY_FLAG[2] ? {3'b111,JOY_SPLIT,3'b111,JOY_MDSEL} : JOY_FLAG[1] ? {6'b111111,JOY_CLK,JOY_LOAD} : '1;
+assign       USER_MODE = JOY_FLAG[2:1] ;
+assign       USER_OSD  = joydb_1[10] & joydb_1[6];
 
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
@@ -153,7 +156,8 @@ localparam CONF_STR = {
 	"-;",
 	"S,CARA52BINROM,Load Cart;",
 	"-;",
-	"OUV,Serial SNAC DB9MD,Off,1 Player,2 Players;",	
+	"OUV,UserIO Joystick,Off,DB9MD,DB15 ;",
+	"OT,UserIO Players, 1 Player,2 Players;",	
 	"-;",
 	"O79,CPU Speed,1x,2x,4x,8x,16x;",
 	"-;",
@@ -210,48 +214,41 @@ wire        img_mounted;
 wire [63:0] img_size;
 wire  [7:0] ioctl_index;
 
-wire [20:0] joy_0 = |status[31:30] ? {
-	joydb9md_1[11],// Reset		-> 10* Z
-	joydb9md_1[8], // Pause		-> 9 * Mode
-	joydb9md_1[7], // Start 	-> 8 * Start
-	joydb9md_1[10],// btn_#		-> 7 * Y 
-	joydb9md_1[9], // btn_*		-> 6 * X
-	joydb9md_1[5], // btn_fire2	-> 5 * C
-	joydb9md_1[6] | joydb9md_1[4], // btn_fire1	-> 4 * A or B
-	joydb9md_1[3], // btn_up	-> 3 * U
-	joydb9md_1[2], // btn_down	-> 2 * D
-	joydb9md_1[1], // btn_left	-> 1 * L
-	joydb9md_1[0], // btn_righ	-> 0 * R 
-	} 
-	: joy_0_USB;
 
-wire [20:0] joy_1 =  status[31]    ? {
-	joydb9md_2[11],// Reset		-> 10* Z
-	joydb9md_2[8], // Pause		-> 9 * Mode
-	joydb9md_2[7], // Start 	-> 8 * Start
-	joydb9md_2[10],// btn_#		-> 7 * Y 
-	joydb9md_2[9], // btn_*		-> 6 * X
-	joydb9md_2[5], // btn_fire2	-> 5 * C
-	joydb9md_2[6] | joydb9md_2[4], // btn_fire1	-> 4 * A or B
-	joydb9md_2[3], // btn_up	-> 3 * U
-	joydb9md_2[2], // btn_down	-> 2 * D
-	joydb9md_2[1], // btn_left	-> 1 * L
-	joydb9md_2[0], // btn_righ	-> 0 * R 
-	} 
-	: status[30] ? joy_0_USB : joy_1_USB;
+// R M S # * F2 F1 U D L R 
+wire [31:0] joy_0 = joydb_1ena ? (OSD_STATUS? 32'b000000 : {joydb_1[9],joydb_1[11],joydb_1[10],joydb_1[8],joydb_1[7],joydb_1[6],joydb_1[5]|joydb_1[4],joydb_1[3:0]}) : joy_0_USB;
+wire [31:0] joy_1 = joydb_2ena ? (OSD_STATUS? 32'b000000 : {joydb_2[9],joydb_2[11],joydb_2[10],joydb_2[8],joydb_2[7],joydb_2[6],joydb_2[5]|joydb_2[4],joydb_2[3:0]}) : joydb_1ena ? joy_0_USB : joy_1_USB;
 
+wire [15:0] joydb_1 = JOY_FLAG[2] ? JOYDB9MD_1 : JOY_FLAG[1] ? JOYDB15_1 : '0;
+wire [15:0] joydb_2 = JOY_FLAG[2] ? JOYDB9MD_2 : JOY_FLAG[1] ? JOYDB15_2 : '0;
+wire        joydb_1ena = |JOY_FLAG[2:1]              ;
+wire        joydb_2ena = |JOY_FLAG[2:1] & JOY_FLAG[0];
 
-reg [15:0] joydb9md_1,joydb9md_2;
+//----BA 9876543210
+//----MS ZYXCBAUDLR
+reg [15:0] JOYDB9MD_1,JOYDB9MD_2;
 joy_db9md joy_db9md
 (
-  .clk       ( clk_sys    ), //35-50MHz
-  .joy_split ( joy_split  ),
-  .joy_mdsel ( joy_mdsel  ),
-  .joy_in    ( joy_in     ),
-  .joystick1 ( joydb9md_1 ),
-  .joystick2 ( joydb9md_2 )	  
+  .clk       ( CLK_JOY    ), //40-50MHz
+  .joy_split ( JOY_SPLIT  ),
+  .joy_mdsel ( JOY_MDSEL  ),
+  .joy_in    ( JOY_MDIN   ),
+  .joystick1 ( JOYDB9MD_1 ),
+  .joystick2 ( JOYDB9MD_2 )	  
 );
 
+//----BA 9876543210
+//----LS FEDCBAUDLR
+reg [15:0] JOYDB15_1,JOYDB15_2;
+joy_db15 joy_db15
+(
+  .clk       ( CLK_JOY   ), //48MHz
+  .JOY_CLK   ( JOY_CLK   ),
+  .JOY_DATA  ( JOY_DATA  ),
+  .JOY_LOAD  ( JOY_LOAD  ),
+  .joystick1 ( JOYDB15_1 ),
+  .joystick2 ( JOYDB15_2 )	  
+);
 
 
 hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
@@ -263,7 +260,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 
 	.joystick_0(joy_0_USB),
 	.joystick_1(joy_1_USB),
-	.joy_raw({joydb9md_1[4],joydb9md_1[6],joydb9md_1[3:0]}),
+	.joy_raw(OSD_STATUS? (joydb_1[5:0]|joydb_2[5:0]) : 6'b000000 ),
 	.joystick_analog_0(joya_0),
 	.joystick_analog_1(joya_1),
 

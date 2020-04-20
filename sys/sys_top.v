@@ -1049,20 +1049,20 @@ alsa alsa
 
 ////////////////  User I/O (USB 3.0 connector) /////////////////////////
 
-assign USER_IO[0] = user_mode ? user_out[0] : !user_out[0]  ? 1'b0 : 1'bZ;
-assign USER_IO[1] =                       !user_out[1]  ? 1'b0 : 1'bZ;
+assign USER_IO[0] = |user_mode   ? user_out[0] : !user_out[0]  ? 1'b0 : 1'bZ;
+assign USER_IO[1] = user_mode[0] ? user_out[1] : !user_out[1]  ? 1'b0 : 1'bZ;
 assign USER_IO[2] = !(SW[1] ? HDMI_I2S   : user_out[2]) ? 1'b0 : 1'bZ;
 assign USER_IO[3] =                       !user_out[3]  ? 1'b0 : 1'bZ;
-assign USER_IO[4] = user_mode ? user_out[4] : !(SW[1] ? HDMI_SCLK  : user_out[4]) ? 1'b0 : 1'bZ;
+assign USER_IO[4] = user_mode[1] ? user_out[4] : !(SW[1] ? HDMI_SCLK  : user_out[4]) ? 1'b0 : 1'bZ;
 assign USER_IO[5] = !(SW[1] ? HDMI_LRCLK : user_out[5]) ? 1'b0 : 1'bZ;
 assign USER_IO[6] =                       !user_out[6]  ? 1'b0 : 1'bZ;
 assign USER_IO[7] =                       !user_out[7]  ? 1'b0 : 1'bZ;
 
-assign user_in[0] = user_mode ? 1'b0 : USER_IO[0];
-assign user_in[1] =         USER_IO[1];
+assign user_in[0] = |user_mode   ? 1'b0 : USER_IO[0];
+assign user_in[1] = user_mode[0] ? 1'b0 : USER_IO[1];
 assign user_in[2] = SW[1] | USER_IO[2];
 assign user_in[3] =         USER_IO[3];
-assign user_in[4] = user_mode ? 1'b0 : SW[1] | USER_IO[4];
+assign user_in[4] = user_mode[1] ? 1'b0 : SW[1] | USER_IO[4];
 assign user_in[5] = SW[1] | USER_IO[5];
 assign user_in[6] =         USER_IO[6];
 assign user_in[7] =         USER_IO[7];
@@ -1107,7 +1107,8 @@ wire        uart_txd;
 wire        osd_status;
 
 wire  [7:0] user_out, user_in;
-wire        user_mode, user_osd;
+wire  [1:0] user_mode;
+wire        user_osd;
 
 emu emu
 (
