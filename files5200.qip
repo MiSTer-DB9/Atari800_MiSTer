@@ -1,3 +1,5 @@
+set_global_assignment -name VERILOG_FILE joydb9md.v
+set_global_assignment -name VERILOG_FILE joydb15.v
 set_global_assignment -name QIP_FILE t65/t65.qip
 set_global_assignment -name SDC_FILE sdram.sdc
 set_global_assignment -name VHDL_FILE common/a8core/atari5200core.vhd
@@ -55,4 +57,3 @@ set_global_assignment -name VHDL_FILE common/zpu/fifo_receive.vhd
 set_global_assignment -name VHDL_FILE bram.vhd
 set_global_assignment -name VHDL_FILE atari5200top.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE Atari5200.sv
-set_global_assignment -name VERILOG_FILE sys/joydb9md.v
