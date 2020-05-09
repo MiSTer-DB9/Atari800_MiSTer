@@ -306,6 +306,9 @@ always@(posedge clk_sys) begin
 		end else begin
 
 			case(cmd)
+				// Reading user_io raw joy
+				'h0f: io_dout <= joy_raw;
+
 				// buttons and switches
 				'h01: cfg <= io_din;
 				'h02: if(byte_cnt==1) joystick_0[15:0] <= io_din; else joystick_0[31:16] <= io_din;
@@ -460,12 +463,8 @@ always@(posedge clk_sys) begin
 								2: io_dout <= status_req[31:16];
 								3: io_dout <= status_req[47:32];
 								4: io_dout <= status_req[63:48];
-						end
 							endcase
-// Reading user_io raw joy
-'h0f: io_dout <= joy_raw;
-// buttons and switches
-'h01: cfg <= io_din;
+						end
 
 				//menu mask
 				'h2E: if(byte_cnt == 1) io_dout <= status_menumask;
