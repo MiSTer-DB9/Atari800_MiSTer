@@ -29,7 +29,7 @@ module emu
 	input         RESET,
 
 	//Must be passed to hps_io module
-	inout  [45:0] HPS_BUS,
+	inout  [48:0] HPS_BUS,
 
 	//Base video clock. Usually equals to CLK_SYS.
 	output        CLK_VIDEO,
@@ -55,8 +55,9 @@ module emu
 
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
+	output        HDMI_FREEZE,
 
-`ifdef USE_FB
+`ifdef MISTER_FB
 	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
 	// FB_FORMAT:
 	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
@@ -74,6 +75,7 @@ module emu
 	input         FB_LL,
 	output        FB_FORCE_BLANK,
 
+`ifdef MISTER_FB_PALETTE
 	// Palette control for 8bit modes.
 	// Ignored for other video modes.
 	output        FB_PAL_CLK,
@@ -81,6 +83,7 @@ module emu
 	output [23:0] FB_PAL_DOUT,
 	input  [23:0] FB_PAL_DIN,
 	output        FB_PAL_WR,
+`endif
 `endif
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
@@ -112,7 +115,6 @@ module emu
 	output        SD_CS,
 	input         SD_CD,
 
-`ifdef USE_DDRAM
 	//High latency DDR3 RAM interface
 	//Use for non-critical time purposes
 	output        DDRAM_CLK,
@@ -125,9 +127,7 @@ module emu
 	output [63:0] DDRAM_DIN,
 	output  [7:0] DDRAM_BE,
 	output        DDRAM_WE,
-`endif
 
-`ifdef USE_SDRAM
 	//SDRAM interface with lower latency
 	output        SDRAM_CLK,
 	output        SDRAM_CKE,
@@ -140,10 +140,10 @@ module emu
 	output        SDRAM_nCAS,
 	output        SDRAM_nRAS,
 	output        SDRAM_nWE,
-`endif
 
-`ifdef DUAL_SDRAM
+`ifdef MISTER_DUAL_SDRAM
 	//Secondary SDRAM
+	//Set all output SDRAM_* signals to Z ASAP if SDRAM2_EN is 0
 	input         SDRAM2_EN,
 	output        SDRAM2_CLK,
 	output [12:0] SDRAM2_A,
@@ -196,6 +196,7 @@ assign LED_DISK  = 0;
 assign LED_POWER = 0;
 assign BUTTONS   = 0;
 assign VGA_SCALER= 0;
+assign HDMI_FREEZE = 0;
 
 wire [1:0] ar       = status[23:22];
 wire       vcrop_en = status[24];
@@ -302,7 +303,7 @@ wire [21:0] gamma_bus;
 reg  [31:0] sd_lba;
 reg   [2:0] sd_rd;
 reg   [2:0] sd_wr;
-wire        sd_ack;
+wire  [2:0] sd_ack;
 wire  [8:0] sd_buff_addr;
 wire  [7:0] sd_buff_dout;
 wire  [7:0] sd_buff_din;
@@ -352,18 +353,15 @@ joy_db15 joy_db15
 );
 
 
-hps_io #(.STRLEN($size(CONF_STR)>>3), .VDNUM(3)) hps_io
+hps_io #(.CONF_STR(CONF_STR), .VDNUM(3)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
-
-	.conf_str(CONF_STR),
-
+	.joy_raw(OSD_STATUS? (joydb_1[5:0]|joydb_2[5:0]) : 6'b000000 ),
 	.joystick_0(joy_0_USB),
 	.joystick_1(joy_1_USB),
-	.joy_raw(OSD_STATUS? (joydb_1[5:0]|joydb_2[5:0]) : 6'b000000 ),
-	.joystick_analog_0(joya_0),
-	.joystick_analog_1(joya_1),
+	.joystick_l_analog_0(joya_0),
+	.joystick_l_analog_1(joya_1),
 
 	.buttons(buttons),
 	.status(status),
@@ -374,13 +372,13 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .VDNUM(3)) hps_io
 	.ps2_key(ps2_key),
 	.ps2_mouse(ps2_mouse),
 
-	.sd_lba(sd_lba),
+	.sd_lba('{sd_lba,sd_lba,sd_lba}),
 	.sd_rd(sd_rd),
 	.sd_wr(sd_wr),
 	.sd_ack(sd_ack),
 	.sd_buff_addr(sd_buff_addr),
 	.sd_buff_dout(sd_buff_dout),
-	.sd_buff_din(sd_buff_din),
+	.sd_buff_din('{sd_buff_din,sd_buff_din,sd_buff_din}),
 	.sd_buff_wr(sd_buff_wr),
 	.img_mounted(img_mounted),
 	.img_readonly(img_readonly),
@@ -453,6 +451,7 @@ atari800top atari800top
 	.RAM_SIZE(status[15:13]),
 	.DRV_SPEED(status[12:10]),
 
+	.STEREO(status[20]),
 	.AUDIO_L(laudio),
 	.AUDIO_R(raudio),
 
@@ -521,6 +520,7 @@ video_mixer #(.GAMMA(1)) video_mixer
 	.VSync(vsync_o),
 	.scandoubler(scale || forced_scandoubler),
 	.hq2x(scale==1),
+	.freeze_sync(),
 	.VGA_DE(vga_de)
 );
 
@@ -648,10 +648,10 @@ always @(posedge clk_sys) begin
 	old_blwr <= zpu_block_wr;
 	if(~old_blwr & zpu_block_wr) {zpu_io_done,sd_wr[{zpu_drv_num[2], zpu_drv_num[0]}]} <= 1;
 
-	if(sd_ack) {sd_rd, sd_wr} <= 0;
+	if(|sd_ack) {sd_rd, sd_wr} <= 0;
 
-	old_ack <= sd_ack;
-	if(old_ack & ~sd_ack) zpu_io_done <= 1;
+	old_ack <= |sd_ack;
+	if(old_ack & ~|sd_ack) zpu_io_done <= 1;
 
 	old_mounted <= |img_mounted;
 	if(~old_mounted && |img_mounted) begin
