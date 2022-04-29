@@ -178,7 +178,7 @@ module emu
 assign ADC_BUS  = 'Z;
 
 wire         CLK_JOY = CLK_50M;         //Assign clock between 40-50Mhz
-wire   [2:0] JOY_FLAG  = {status[30],status[31],status[29]}; //Assign 3 bits of status (31:29) o (63:61)
+wire   [2:0] JOY_FLAG  = {status[62],status[63],status[61]}; //Assign 3 bits of status (31:29) o (63:61)
 wire         JOY_CLK, JOY_LOAD, JOY_SPLIT, JOY_MDSEL;
 wire   [5:0] JOY_MDIN  = JOY_FLAG[2] ? {USER_IN[6],USER_IN[3],USER_IN[5],USER_IN[7],USER_IN[1],USER_IN[2]} : '1;
 wire         JOY_DATA  = JOY_FLAG[1] ? USER_IN[5] : '1;
@@ -237,8 +237,8 @@ localparam CONF_STR = {
 	"S1,ATRXEXXFDATX,Mount D2;",
 	"S2,CARROMBIN,Load Cart;",
 	"-;",
-	"OUV,UserIO Joystick,Off,DB9MD,DB15 ;",
-	"OT,UserIO Players, 1 Player,2 Players;",
+	"oUV,UserIO Joystick,Off,DB9MD,DB15 ;",
+	"oT,UserIO Players, 1 Player,2 Players;",
 	"OL,Swap Joysticks,No,Yes;",
 	"-;",
 	"O79,CPU Speed,1x,2x,4x,8x,16x;",
