@@ -52,13 +52,14 @@ module emu
 	output        VGA_F1,
 	output [1:0]  VGA_SL,
 	output        VGA_SCALER, // Force VGA scaler
+	output        VGA_DISABLE, // analog out is off
 
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
 	output        HDMI_FREEZE,
 
 `ifdef MISTER_FB
-	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
+	// Use framebuffer in DDRAM
 	// FB_FORMAT:
 	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
 	//    [3]   : 0=16bits 565 1=16bits 1555
@@ -196,6 +197,7 @@ assign LED_DISK  = 0;
 assign LED_POWER = 0;
 assign BUTTONS   = 0;
 assign VGA_SCALER= 0;
+assign VGA_DISABLE = 0;
 assign HDMI_FREEZE = 0;
 
 wire [1:0] ar       = status[23:22];
@@ -259,7 +261,7 @@ localparam CONF_STR = {
 	"O34,Stereo mix,None,25%,50%,100%;",
 	"-;",
 	"R0,Reset;",
-	"J,Fire 1,Fire 2,Fire 3,Paddle LT,Paddle RT;",
+	"J,Fire 1,Fire 2,Fire 3,Paddle LT,Paddle RT,Start,Select,Option,Reset(F9),Reset(F10);",
 	"V,v",`BUILD_DATE
 };
 
@@ -471,8 +473,8 @@ atari800top atari800top
 	.JOY2X(status[21] ? ax : joya_1[7:0] ),
 	.JOY2Y(status[21] ? ay : joya_1[15:8]),
 
-	.JOY1(status[21] ? joy_1[8:0] : j0),
-	.JOY2(status[21] ? j0 : joy_1[8:0])
+	.JOY1(status[21] ? joy_1[13:0] : j0),
+	.JOY2(status[21] ? j0 : joy_1[13:0])
 );
 
 altddio_out
@@ -673,7 +675,7 @@ end
 reg        emu = 0;
 wire [7:0] ax = emu ? mx[7:0] : joya_0[7:0];
 wire [7:0] ay = emu ? my[7:0] : joya_0[15:8];
-wire [8:0] j0 = {emu ? ps2_mouse[1:0] : joy_0[8:7], joy_0[6:0]};
+wire [13:0] j0 = {joy_0[13:9], emu ? ps2_mouse[1:0] : joy_0[8:7], joy_0[6:0]};
 
 reg  signed [8:0] mx = 0;
 wire signed [8:0] mdx = {ps2_mouse[4],ps2_mouse[4],ps2_mouse[15:9]};
