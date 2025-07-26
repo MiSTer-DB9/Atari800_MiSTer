@@ -57,6 +57,8 @@ module emu
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
 	output        HDMI_FREEZE,
+	output        HDMI_BLACKOUT,
+	output        HDMI_BOB_DEINT,
 
 `ifdef MISTER_FB
 	// Use framebuffer in DDRAM
@@ -198,6 +200,8 @@ assign BUTTONS   = 0;
 assign VGA_SCALER= 0;
 assign VGA_DISABLE = 0;
 assign HDMI_FREEZE = 0;
+assign HDMI_BLACKOUT = 0;
+assign HDMI_BOB_DEINT = 0;
 
 wire [1:0] ar       = status[23:22];
 wire       vcrop_en = status[24];
@@ -228,7 +232,7 @@ wire [5:0] CPU_SPEEDS[8] ='{6'd1,6'd2,6'd4,6'd8,6'd16,6'd0,6'd0,6'd0};
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// X  XX XXXX       XXX  XXXXXXXXX
+// X  XXXXXXX       XXX  XXXXXXXXX    X
 
 `include "build_id.v" 
 localparam CONF_STR = {
@@ -244,11 +248,13 @@ localparam CONF_STR = {
 	"OMN,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"OHJ,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
+	"o2,Clip Sides,Off,On;",
 	"d0OO,Vertical Crop,Disabled,216p(5x);",
 	"d0OPS,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;",
 	"OTU,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"-;",
 	"O34,Stereo mix,None,25%,50%,100%;",
+	"O5,Swap Joysticks 1&2,No,Yes;",
 	"O6,Mouse Y,Normal,Inverted;",
 	"-;",
 	"R0,Reset;",
@@ -260,13 +266,16 @@ localparam CONF_STR = {
 
 wire locked;
 wire clk_sys;
-wire clk_mem = clk_sys;
+wire clk_mem;
+wire clk_vdo;
 
 pll pll
 (
 	.refclk(CLK_50M),
 	.rst(0),
 	.outclk_0(clk_sys),
+	.outclk_1(clk_mem),
+	.outclk_2(clk_vdo),
 	.locked(locked)
 );
 
@@ -275,8 +284,12 @@ wire reset = RESET | status[0] | buttons[1];
 //////////////////   HPS I/O   ///////////////////
 wire [20:0] joy_0_USB;
 wire [20:0] joy_1_USB;
+wire [20:0] joy_2_USB;
+wire [20:0] joy_3_USB;
 wire [15:0] joya_0;
 wire [15:0] joya_1;
+wire [15:0] joya_2;
+wire [15:0] joya_3;
 wire  [1:0] buttons;
 wire [63:0] status;
 wire [24:0] ps2_mouse;
@@ -300,6 +313,8 @@ wire  [7:0] ioctl_index;
 // R M S # * F2 F1 U D L R 
 wire [31:0] joy_0 = joydb_1ena ? (OSD_STATUS? 32'b000000 : {joydb_1[9],joydb_1[11],joydb_1[10],joydb_1[8],joydb_1[7],joydb_1[6],joydb_1[5]|joydb_1[4],joydb_1[3:0]}) : joy_0_USB;
 wire [31:0] joy_1 = joydb_2ena ? (OSD_STATUS? 32'b000000 : {joydb_2[9],joydb_2[11],joydb_2[10],joydb_2[8],joydb_2[7],joydb_2[6],joydb_2[5]|joydb_2[4],joydb_2[3:0]}) : joydb_1ena ? joy_0_USB : joy_1_USB;
+wire [31:0] joy_2 = joydb_1ena ? joy_0_USB : joydb_2ena ? joy_1_USB : joy_2_USB;
+wire [31:0] joy_3 = joydb_1ena ? joy_1_USB : joydb_2ena ? joy_2_USB : joy_3_USB;
 
 wire [15:0] joydb_1 = JOY_FLAG[2] ? JOYDB9MD_1 : JOY_FLAG[1] ? JOYDB15_1 : '0;
 wire [15:0] joydb_2 = JOY_FLAG[2] ? JOYDB9MD_2 : JOY_FLAG[1] ? JOYDB15_2 : '0;
@@ -340,8 +355,12 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.joy_raw(OSD_STATUS? (joydb_1[5:0]|joydb_2[5:0]) : 6'b000000 ),
 	.joystick_0(joy_0_USB),
 	.joystick_1(joy_1_USB),
+	.joystick_2(joy_2_USB),
+	.joystick_3(joy_3_USB),
 	.joystick_l_analog_0(joya_0),
 	.joystick_l_analog_1(joya_1),
+	.joystick_l_analog_2(joya_2),
+	.joystick_l_analog_3(joya_3),
 
 	.buttons(buttons),
 	.status(status),
@@ -370,11 +389,14 @@ wire [7:0] R,G,B;
 wire HBlank,VBlank;
 wire VSync, HSync;
 wire ce_pix;
+wire ce_pix_raw;
 
-assign CLK_VIDEO = clk_sys;
+assign CLK_VIDEO = clk_vdo;
 
 wire joy_d1ena = ~&joya_0;
 wire joy_d2ena = ~&joya_1;
+wire joy_d3ena = ~&joya_2;
+wire joy_d4ena = ~&joya_3;
 
 wire cpu_halt;
 
@@ -413,12 +435,13 @@ atari5200top atari5200top
 	.VGA_B(B),
 	.VGA_G(G),
 	.VGA_R(R),
-	.VGA_PIXCE(ce_pix),
+	.VGA_PIXCE(ce_pix_raw),
 	.HBLANK(HBlank),
 	.VBLANK(VBlank),
 
 	.CPU_SPEED(CPU_SPEEDS[status[9:7]]),
 
+	.CLIP_SIDES(status[34]),
 	.AUDIO_L(laudio),
 	.AUDIO_R(raudio),
 
@@ -433,13 +456,19 @@ atari5200top atari5200top
 
 	.ps2_key(ps2_key),
 
-	.JOY1X(ax),
-	.JOY1Y(ay),
-	.JOY2X(joya_1[7:0]),
-	.JOY2Y(joya_1[15:8]),
+	.JOY1X(status[5] ? joya_1[7:0] : ax),
+	.JOY1Y(status[5] ? joya_1[15:8] : ay),
+	.JOY2X(status[5] ? ax : joya_1[7:0]),
+	.JOY2Y(status[5] ? ay : joya_1[15:8]),
+	.JOY3X(joya_2[7:0]),
+	.JOY3Y(joya_2[15:8]),
+	.JOY4X(joya_3[7:0]),
+	.JOY4Y(joya_3[15:8]),
 
-	.JOY1(j0    & {17'b11111111111111111, {4{joy_d1ena}}}),
-	.JOY2(joy_1 & {17'b11111111111111111, {4{joy_d2ena}}})
+	.JOY1((status[5] ? joy_1 : j0) & {17'b11111111111111111, {4{joy_d1ena}}}),
+	.JOY2((status[5] ? j0 : joy_1) & {17'b11111111111111111, {4{joy_d2ena}}}),
+	.JOY3(joy_2 & {17'b11111111111111111, {4{joy_d3ena}}}),
+	.JOY4(joy_3 & {17'b11111111111111111, {4{joy_d4ena}}})
 );
 
 altddio_out
@@ -471,6 +500,13 @@ assign VGA_F1 = 0;
 assign VGA_SL = scale ? scale[1:0] - 1'd1 : 2'd0;
 
 wire [2:0] scale = status[19:17];
+
+reg ce_pix_raw_old = 0;
+assign ce_pix = ce_pix_raw & ~ce_pix_raw_old;
+
+always @(posedge CLK_VIDEO) begin
+	ce_pix_raw_old <= ce_pix_raw;
+end
 
 video_mixer #(.GAMMA(1)) video_mixer
 (
