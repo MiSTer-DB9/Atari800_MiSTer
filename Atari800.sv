@@ -185,7 +185,7 @@ wire   [2:0] JOY_FLAG  = {status[62],status[63],status[61]}; //Assign 3 bits of 
 wire         JOY_CLK, JOY_LOAD, JOY_SPLIT, JOY_MDSEL;
 wire   [5:0] JOY_MDIN  = JOY_FLAG[2] ? {USER_IN[6],USER_IN[3],USER_IN[5],USER_IN[7],USER_IN[1],USER_IN[2]} : '1;
 wire         JOY_DATA  = JOY_FLAG[1] ? USER_IN[5] : '1;
-assign       USER_OUT  = JOY_FLAG[2] ? {3'b111,JOY_SPLIT,3'b111,JOY_MDSEL} : JOY_FLAG[1] ? {6'b111111,JOY_CLK,JOY_LOAD} : '1;
+//assign       USER_OUT  = JOY_FLAG[2] ? {3'b111,JOY_SPLIT,3'b111,JOY_MDSEL} : JOY_FLAG[1] ? {6'b111111,JOY_CLK,JOY_LOAD} : '1;
 assign       USER_MODE = JOY_FLAG[2:1] ;
 assign       USER_OSD  = joydb_1[10] & joydb_1[6];
 
@@ -416,9 +416,9 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(8)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
-
-	.joystick_0(joy_0),
-	.joystick_1(joy_1),
+	.joy_raw(OSD_STATUS? (joydb_1[5:0]|joydb_2[5:0]) : 6'b000000 ),
+	.joystick_0(joy_0_USB),
+	.joystick_1(joy_1_USB),
 	.joystick_l_analog_0(joya_0),
 	.joystick_l_analog_1(joya_1),
 	.joystick_l_analog_2(joya_2),
@@ -917,7 +917,30 @@ end
 // 6   | TX+      | O |SIO_MOTOR
 //
 
-assign USER_OUT  = SIO_MODE ? {SIO_MOTOR, 1'b1, 1'b1, 1'b1, SIO_CMD, SIO_OUT, 1'b1} : 7'b1111111;
+always_comb begin
+USER_OUT    = 8'hFF;
+	if (SIO_MODE) begin
+		USER_OUT[0] = 1'b1;
+		USER_OUT[1] = SIO_OUT;
+		USER_OUT[2] = SIO_CMD;
+		USER_OUT[3] = 1'b1;
+		USER_OUT[4] = 1'b1;
+		USER_OUT[5] = 1'b1;
+		USER_OUT[6] = SIO_MOTOR;
+	end else if (JOY_FLAG[1]) begin
+		USER_OUT[0] = JOY_LOAD;
+		USER_OUT[1] = JOY_CLK;
+		USER_OUT[6] = 1'b1;
+		USER_OUT[4] = 1'b1;
+	end else if (JOY_FLAG[2]) begin
+		USER_OUT[0] = JOY_MDSEL;
+		USER_OUT[1] = 1'b1;
+		USER_OUT[6] = 1'b1;
+		USER_OUT[4] = JOY_SPLIT;
+	end
+end
+
+//assign USER_OUT  = SIO_MODE ? {SIO_MOTOR, 1'b1, 1'b1, 1'b1, SIO_CMD, SIO_OUT, 1'b1} : 7'b1111111;
 
 assign SIO_IN    = ~SIO_MODE | USER_IN[0];
 assign SIO_CLKIN = ~SIO_MODE | USER_IN[3];
