@@ -14,7 +14,7 @@ COMPILATION_INPUT=(Atari5200.qpf Atari800.qpf)
 COMPILATION_OUTPUT=(output_files/Atari5200.rbf output_files/Atari800.rbf)
 QUARTUS_IMAGE="${QUARTUS_IMAGE:?QUARTUS_IMAGE env not set — populated by workflow Resolve-Quartus-image step}"
 # [MiSTer-DB9 BEGIN] - 1 → exit after merge+push so release_v2.yml builds.
-RELEASE_V2_MODE="0"
+RELEASE_V2_MODE="1"
 # [MiSTer-DB9 END]
 
 # [MiSTer-DB9 BEGIN] - fork-only cores have no upstream; sync_release is a no-op
