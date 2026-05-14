@@ -21,7 +21,7 @@ ENTITY atari5200core IS
 		cycle_length : integer := 16; -- or 32...
 		video_bits : integer := 8;
 		palette : integer :=0; -- 0:gtia colour on VIDEO_B, 1:on
-		low_memory : integer := 0; -- 0:8MB memory map, 1:1MB memory map
+		low_memory : integer := 0; -- 0:32MB memory map, 1:1MB memory map
 		sdram_start_bank : integer := 0
 	);
 	PORT
@@ -106,31 +106,13 @@ ENTITY atari5200core IS
 		-- we can dma from memory space
 		-- etc.
 
-		-- External RAM/ROM - adhere to standard memory map
-		-- TODO - lower/upper memory split defined by generic
-		-- (TODO SRAM lower ram, SDRAM upper ram - no overlap?)
-		---- SRAM memory map (512k) (if USE_SDRAM=0)
-		---- base 64k RAM  - banks 0-3    "000 0000 1111 1111 1111 1111" (TOP)
-		---- to 512k RAM   - banks 4-31   "000 0111 1111 1111 1111 1111" (TOP)
-		---- SDRAM memory map (8MB) (lower 512k if USE_SDRAM=1)
-		---- base 64k RAM  - banks 0-3    "000 0000 1111 1111 1111 1111" (TOP)
-		---- to 512k RAM   - banks 4-31   "000 0111 1111 1111 1111 1111" (TOP) 
-		---- to 4MB RAM    - banks 32-255 "011 1111 1111 1111 1111 1111" (TOP)
-		---- +64k          - banks 256-259"100 0000 0000 1111 1111 1111" (TOP)
-		---- SCRATCH       - 4MB+64k-5MB
-		---- CARTS         -              "101 YYYY YYY0 0000 0000 0000" (BOT) - 2MB! 8kb banks
-		--SDRAM_CART_ADDR      <= "101"&cart_select& "0000000000000";
-		---- BASIC/OS ROM  -              "111 XXXX XX00 0000 0000 0000" (BOT) (BASIC IN SLOT 0!), 2nd to last 512K				
-		--SDRAM_BASIC_ROM_ADDR <= "111"&"000000"   &"00000000000000";
-		--SDRAM_OS_ROM_ADDR    <= "111"&rom_select &"00000000000000";
-		---- SYSTEM        -              "111 1000 0000 0000 0000 0000" (BOT) - LAST 512K
 		-- TODO - review if we need to pass out so many of these
 		-- Perhaps we can simplify address decoder and have an external layer?
 		SDRAM_REQUEST : OUT std_logic;
 		SDRAM_REQUEST_COMPLETE : IN std_logic;
 		SDRAM_READ_ENABLE : out STD_LOGIC;
 		SDRAM_WRITE_ENABLE : out std_logic;
-		SDRAM_ADDR : out STD_LOGIC_VECTOR(22 DOWNTO 0);
+		SDRAM_ADDR : out STD_LOGIC_VECTOR(24 DOWNTO 0);
 		SDRAM_DO : in STD_LOGIC_VECTOR(31 DOWNTO 0);
 
 		RAM_ADDR : OUT STD_LOGIC_VECTOR(18 DOWNTO 0);
@@ -148,23 +130,24 @@ ENTITY atari5200core IS
 		-- DMA memory map differs
 		-- e.g. some special addresses to read behind hardware registers
 		-- 0x0000-0xffff: Atari registers + 3 mirrors (bit 16/17)
-		-- 23 downto 21:
-		-- 001 : SRAM,512k
-		-- 010|011 : ROM, 4MB
-		-- 10xx : SDRAM, 8MB (If you have more, its unmapped for now... Can bank switch! Atari can't access this much anyway...)
+		-- 25 downto 21:
+		-- 00001 : SRAM,512k
+		-- 00010|00011 : ROM, 4MB
+		-- 1xxxx : SDRAM, 32MB
 		DMA_FETCH : in STD_LOGIC; -- we want to read/write
 		DMA_READ_ENABLE : in std_logic;
 		DMA_32BIT_WRITE_ENABLE : in std_logic;
 		DMA_16BIT_WRITE_ENABLE : in std_logic;
 		DMA_8BIT_WRITE_ENABLE : in std_logic;
-		DMA_ADDR : in std_logic_vector(23 downto 0);
+		DMA_ADDR : in std_logic_vector(25 downto 0);
 		DMA_WRITE_DATA : in std_logic_vector(31 downto 0);
 		MEMORY_READY_DMA : out std_logic; -- op complete
 
 		-- Special config params
 		ROM_IN_RAM : in std_logic;
 		HALT : in std_logic;
-		THROTTLE_COUNT_6502 : in STD_LOGIC_VECTOR(5 DOWNTO 0)
+		THROTTLE_COUNT_6502 : in STD_LOGIC_VECTOR(5 DOWNTO 0);
+		EMULATED_CARTRIDGE_SELECT : IN STD_LOGIC_VECTOR(7 DOWNTO 0)
 	);
 END atari5200core;
 
@@ -178,7 +161,6 @@ SIGNAL	ANTIC_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
 SIGNAL	CACHE_ANTIC_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
 SIGNAL	ANTIC_FETCH :  STD_LOGIC;
 SIGNAL	ANTIC_HIGHRES_COLOUR_CLOCK_OUT :  STD_LOGIC;
-SIGNAL	ANTIC_ORIGINAL_COLOUR_CLOCK_OUT :  STD_LOGIC;
 SIGNAL	ANTIC_RDY :  STD_LOGIC;
 SIGNAL	ANTIC_WRITE_ENABLE :  STD_LOGIC;
 signal ANTIC_REFRESH_CYCLE : STD_LOGIC;
@@ -281,14 +263,12 @@ PORT MAP(CLK => CLK,
 		 MEMORY_READY_CPU => MEMORY_READY_CPU,
 		 ANTIC_ENABLE_179 => ANTIC_ENABLE_179,
 		 PAL => '0',
-		 EXT_ANTIC => '0',
 		 lightpen => '0',
 		 ADDR => PBI_ADDR_INT(3 DOWNTO 0),
 		 CPU_DATA_IN => WRITE_DATA(7 DOWNTO 0),
 		 MEMORY_DATA_IN => MEMORY_DATA(7 DOWNTO 0),
 		 NMI_N_OUT => NMI_n,
 		 ANTIC_READY => ANTIC_RDY,
-		 COLOUR_CLOCK_ORIGINAL_OUT => ANTIC_ORIGINAL_COLOUR_CLOCK_OUT,
 		 COLOUR_CLOCK_OUT => ANTIC_COLOUR_CLOCK_OUT,
 		 HIGHRES_COLOUR_CLOCK_OUT => ANTIC_HIGHRES_COLOUR_CLOCK_OUT,
 		 dma_fetch_out => ANTIC_FETCH,
@@ -393,7 +373,7 @@ PORT MAP(CLK => CLK,
 		 SDRAM_ADDR => SDRAM_ADDR,
 		 WRITE_DATA => WRITE_DATA,
 		 d6_wr_enable => open,
-		 cart_select => (others=>'0'),
+		 cart_select => EMULATED_CARTRIDGE_SELECT,
 		 cart2_select => (others=>'0'),
 		 rom_in_ram => ROM_IN_RAM,
 		 freezer_enable => '0',
@@ -431,7 +411,6 @@ PORT MAP(CLK => CLK,
 		 PAL => '0',
 		 CLIP_SIDES => CLIP_SIDES,
 		 ENABLE_179 => ANTIC_ENABLE_179,
-		 COLOUR_CLOCK_ORIGINAL => ANTIC_ORIGINAL_COLOUR_CLOCK_OUT,
 		 COLOUR_CLOCK => ANTIC_COLOUR_CLOCK_OUT,
 		 COLOUR_CLOCK_HIGHRES => ANTIC_HIGHRES_COLOUR_CLOCK_OUT,
 		 CONSOL_OUT => CONSOL_OUT,
