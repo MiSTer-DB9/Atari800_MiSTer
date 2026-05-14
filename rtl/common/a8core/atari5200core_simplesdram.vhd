@@ -67,7 +67,7 @@ ENTITY atari5200core_simplesdram is
 		SDRAM_REQUEST_COMPLETE : IN std_logic;
 		SDRAM_READ_ENABLE : out STD_LOGIC;
 		SDRAM_WRITE_ENABLE : out std_logic;
-		SDRAM_ADDR : out STD_LOGIC_VECTOR(22 DOWNTO 0);
+		SDRAM_ADDR : out STD_LOGIC_VECTOR(24 DOWNTO 0);
 		SDRAM_DO : in STD_LOGIC_VECTOR(31 DOWNTO 0);
 		SDRAM_DI : out STD_LOGIC_VECTOR(31 DOWNTO 0);
 		SDRAM_32BIT_WRITE_ENABLE : out std_logic;
@@ -80,14 +80,15 @@ ENTITY atari5200core_simplesdram is
 		DMA_32BIT_WRITE_ENABLE : in std_logic;
 		DMA_16BIT_WRITE_ENABLE : in std_logic;
 		DMA_8BIT_WRITE_ENABLE : in std_logic;
-		DMA_ADDR : in std_logic_vector(23 downto 0);
+		DMA_ADDR : in std_logic_vector(25 downto 0);
 		DMA_WRITE_DATA : in std_logic_vector(31 downto 0);
 		MEMORY_READY_DMA : out std_logic; -- op complete
 		DMA_MEMORY_DATA : out std_logic_vector(31 downto 0);
 
 		HALT : in std_logic;
 		THROTTLE_COUNT_6502 : in std_logic_vector(5 downto 0); -- standard speed is cycle_length-1
-	
+		EMULATED_CARTRIDGE_SELECT : in std_logic_vector(7 downto 0);
+
 		-- JOYSTICK
 		JOY1_X : IN signed(7 downto 0);
 		JOY1_Y : IN signed(7 downto 0);
@@ -435,7 +436,8 @@ PORT MAP
 	-- Special config params
 	ROM_IN_RAM => ROM_IN_RAM,
 	THROTTLE_COUNT_6502 => THROTTLE_COUNT_6502,
-	HALT => HALT
+	HALT => HALT,
+	EMULATED_CARTRIDGE_SELECT => EMULATED_CARTRIDGE_SELECT
 );
 
 -- Since we're not exposing PBI, expose a few key parts needed for SDRAM

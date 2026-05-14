@@ -232,7 +232,7 @@ assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z; 
 
-assign LED_USER  = 0;
+assign LED_USER  = file_download;
 assign LED_DISK  = 0;
 assign LED_POWER = 0;
 assign BUTTONS   = 0;
@@ -271,13 +271,13 @@ wire [5:0] CPU_SPEEDS[8] ='{6'd1,6'd2,6'd4,6'd8,6'd16,6'd0,6'd0,6'd0};
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// X  XXXXXXX       XXX  XXXXXXXXX    X
+// X    XXXXX       XXX  XXXXXXXXXX   X     X              XX X     
 
 `include "build_id.v" 
 localparam CONF_STR = {
 	"ATARI5200;;",
 	"-;",
-	"S,CARA52BINROM,Load Cart;",
+	"F1,CARA52BINROM,Load Cart;",
 	"-;",
 		// [MiSTer-DB9-Pro BEGIN] - Saturn-first joy_type (canonical bit notation)
 	"O[127:126],UserIO Joystick,Off,Saturn,DB9MD,DB15;",
@@ -289,17 +289,21 @@ localparam CONF_STR = {
 	"-;",
 	"OMN,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"OHJ,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	"OV,NTSC artifacting,No,Yes;",
+	"d1oN,Artifacting colors,Set 1,Set 2;",
+	"d1oQ,Swap artif. colors,No,Yes;",
 	"-;",
 	"o2,Clip Sides,Off,On;",
 	"d0OO,Vertical Crop,Disabled,216p(5x);",
 	"d0OPS,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;",
 	"OTU,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"-;",
-	"O34,Stereo mix,None,25%,50%,100%;",
 	"O5,Swap Joysticks 1&2,No,Yes;",
+	"oO,Mouse X,Normal,Inverted;",
 	"O6,Mouse Y,Normal,Inverted;",
 	"-;",
-	"R0,Reset;",
+	"r8,Cold Reset (F10);",
+  	"R0,Reset (Detach Carts);",
 	"J1,Fire 1,Fire 2,*,#,Start,Pause,Reset,0,1,2,3,4,5,6,7,8,9;",
 	"V,v",`BUILD_DATE
 };
@@ -321,7 +325,7 @@ pll pll
 	.locked(locked)
 );
 
-wire reset = RESET | status[0] | buttons[1];
+wire reset = RESET;
 
 //////////////////   HPS I/O   ///////////////////
 wire [20:0] joy_0_USB;
@@ -341,17 +345,20 @@ wire [10:0] ps2_key;
 wire        forced_scandoubler;
 wire [21:0] gamma_bus;
 
-wire [31:0] sd_lba;
-wire        sd_rd;
-wire        sd_wr;
-wire        sd_ack;
-wire  [8:0] sd_buff_addr;
-wire  [7:0] sd_buff_dout;
-wire  [7:0] sd_buff_din;
-wire        sd_buff_wr;
-wire        img_mounted;
-wire [63:0] img_size;
 wire  [7:0] ioctl_index;
+wire [26:0] ioctl_addr;
+wire  [7:0] ioctl_dout;
+wire        ioctl_download;
+reg         ioctl_wait = 1;
+wire        ioctl_wr;
+
+wire [35:0] EXT_BUS;
+wire  [7:0] cart_select;
+wire        set_reset;
+wire        set_pause;
+wire        sdram_ready;
+wire        dma_ready;
+reg         dma_req = 0;
 
 
 // R M S # * F2 F1 U D L R 
@@ -385,30 +392,41 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.buttons(buttons),
 	.status(status),
-	.status_menumask({en216p}),
+	.status_menumask({status[31],en216p}),
 	.forced_scandoubler(forced_scandoubler),
 	.gamma_bus(gamma_bus),
 
 	.ps2_key(ps2_key),
 	.ps2_mouse(ps2_mouse),
 
-	.sd_lba('{sd_lba}),
-	.sd_rd(sd_rd),
-	.sd_wr(sd_wr),
-	.sd_ack(sd_ack),
-	.sd_buff_addr(sd_buff_addr),
-	.sd_buff_dout(sd_buff_dout),
-	.sd_buff_din('{sd_buff_din}),
-	.sd_buff_wr(sd_buff_wr),
-	.img_mounted(img_mounted),
-	.img_size(img_size),
+	.ioctl_index(ioctl_index),
+	.ioctl_addr(ioctl_addr),
+	.ioctl_dout(ioctl_dout),
+	.ioctl_download(ioctl_download),
+	.ioctl_wait(ioctl_wait),
+	.ioctl_wr(ioctl_wr),
 	
-	.ioctl_index(ioctl_index)
+	.EXT_BUS(EXT_BUS)
 );
 
-wire [7:0] R,G,B;
-wire HBlank,VBlank;
-wire VSync, HSync;
+hps_ext hps_ext
+(
+	.clk_sys(clk_sys),
+	.EXT_BUS(EXT_BUS),
+
+	.set_reset(set_reset),
+	.set_pause(set_pause),
+	.cart1_select(cart_select),
+	.atari_status1(atari_status1),
+
+	.atari_status2(0),
+	.uart_data_read(0)
+);
+
+
+wire [7:0] R,G,B,Ro,Go,Bo;
+wire HBlank,VBlank,HBlank_o,VBlank_o;
+wire VSync, HSync, VSync_o, HSync_o;
 wire ce_pix;
 wire ce_pix_raw;
 
@@ -422,21 +440,12 @@ wire joy_d4ena = ~&joya_3;
 wire cpu_halt;
 
 wire [15:0] laudio, raudio;
-assign AUDIO_R = {raudio[15],raudio[15:1]};
-assign AUDIO_L = {laudio[15],laudio[15:1]};
+assign AUDIO_R = (cpu_halt | reset) ? 16'b0000000000000000 : {raudio[15],raudio[15:1]};
+assign AUDIO_L = (cpu_halt | reset) ? 16'b0000000000000000 : {laudio[15],laudio[15:1]};
 assign AUDIO_S = 1;
-assign AUDIO_MIX = status[4:3];
+assign AUDIO_MIX = 0;
 
-wire  [7:0]	ZPU_IN2;
-wire [31:0]	ZPU_OUT2;
-wire [31:0]	ZPU_IN3;
-wire [31:0]	ZPU_OUT3;
-wire [15:0]	ZPU_RD;
-wire [15:0]	ZPU_WR;
-
-assign {SDRAM_DQMH,SDRAM_DQML} = SDRAM_A[12:11];
 assign SDRAM_CKE = 1;
-assign SDRAM_nCS = 0;
 
 atari5200top atari5200top
 (
@@ -450,28 +459,39 @@ atari5200top atari5200top
 	.SDRAM_nWE(SDRAM_nWE),
 	.SDRAM_A(SDRAM_A),
 	.SDRAM_DQ(SDRAM_DQ),
+	.SDRAM_nCS(SDRAM_nCS),
+	.SDRAM_DQMH(SDRAM_DQMH),
+	.SDRAM_DQML(SDRAM_DQML),
 
-	.VGA_VS(VSync),
-	.VGA_HS(HSync),
-	.VGA_B(B),
-	.VGA_G(G),
-	.VGA_R(R),
+	.ROM_ADDR(rom_addr),
+	.ROM_DATA(rom_data),
+
+	.SDRAM_READY(sdram_ready),
+	.OSD_PAUSE(file_download),
+	.SET_RESET_IN(set_reset),
+	.SET_PAUSE_IN(set_pause),
+	.CART_SELECT_IN(cart_select),
+	.HOT_KEYS(atari_hotkeys),
+	.COLD_RESET_MENU(status[40] | buttons[1]),
+	.HPS_DMA_ADDR(ioctl_index == 0 ? {15'b100111000001000, ioctl_addr[10:0]} : ioctl_addr[25:0]),
+	.HPS_DMA_REQ(dma_req),
+	.HPS_DMA_DATA_OUT(ioctl_dout),
+	.HPS_DMA_READY(dma_ready),
+
+	.VGA_VS(VSync_o),
+	.VGA_HS(HSync_o),
+	.VGA_B(Bo),
+	.VGA_G(Go),
+	.VGA_R(Ro),
 	.VGA_PIXCE(ce_pix_raw),
-	.HBLANK(HBlank),
-	.VBLANK(VBlank),
+	.HBLANK(HBlank_o),
+	.VBLANK(VBlank_o),
 
 	.CPU_SPEED(CPU_SPEEDS[status[9:7]]),
 
 	.CLIP_SIDES(status[34]),
 	.AUDIO_L(laudio),
 	.AUDIO_R(raudio),
-
-	.ZPU_IN2(ZPU_IN2),
-	.ZPU_OUT2(ZPU_OUT2),
-	.ZPU_IN3(ZPU_IN3),
-	.ZPU_OUT3(ZPU_OUT3),
-	.ZPU_RD(ZPU_RD),
-	.ZPU_WR(ZPU_WR),
 
 	.CPU_HALT(cpu_halt),
 
@@ -529,6 +549,40 @@ always @(posedge CLK_VIDEO) begin
 	ce_pix_raw_old <= ce_pix_raw;
 end
 
+reg hsync_o, vsync_o;
+always @(posedge CLK_VIDEO) begin
+	if(ce_pix) begin
+		hsync_o <= HSync_o;
+		if(~hsync_o & HSync_o) vsync_o <= VSync_o;
+	end
+end
+
+articolor articolor
+(
+	.clk(CLK_VIDEO),
+	.ce_pix(ce_pix),
+	
+	.enable(status[31]),
+	.colorset(~status[55]),
+	.colorswap(status[58]),
+
+	.r_in(Ro),
+	.g_in(Go),
+	.b_in(Bo),
+	.hbl_in(HBlank_o),
+	.vbl_in(VBlank_o),
+	.hs_in(hsync_o),
+	.vs_in(vsync_o),
+
+	.r_out(R),
+	.g_out(G),
+	.b_out(B),
+	.hbl_out(HBlank),
+	.vbl_out(VBlank),
+	.hs_out(HSync),
+	.vs_out(VSync)
+);
+
 video_mixer #(.GAMMA(1)) video_mixer
 (
 	.*,
@@ -538,93 +592,54 @@ video_mixer #(.GAMMA(1)) video_mixer
 	.VGA_DE(vga_de)
 );
 
+//////////////////   ROM   ///////////////////
 
-//////////////////   SD   ///////////////////
+wire  [7:0] rom_data;
+wire [10:0] rom_addr;
 
-dpram #(9,8) sdbuf
+dpram #(11, 8, "rtl/rom/5200.mif") bios_5200
 (
 	.clock(clk_sys),
 
-	.address_a(sd_buff_addr),
-	.data_a(sd_buff_dout),
-	.wren_a(sd_buff_wr),
-	.q_a(sd_buff_din),
+	.address_a(ioctl_addr[10:0]),
+	.data_a(ioctl_dout),
+	.wren_a(ioctl_wr && (ioctl_index == 0)), // boot.rom download from the main
 
-	.address_b(zpu_buff_addr),
-	.data_b(ZPU_OUT3[7:0]),
-	.wren_b(zpu_buf_wr),
-	.q_b(zpu_buf_q)
+	.address_b(rom_addr),
+	.q_b(rom_data)
 );
 
-wire[7:0] zpu_buf_q;
+//////////////////   IO   ///////////////////
 
-assign ZPU_IN2[0]   = zpu_io_done;
-assign ZPU_IN2[1]   = zpu_mounted;
-assign ZPU_IN2[4:2] = zpu_fileno;
-assign ZPU_IN2[6:5] = zpu_filetype;
-assign ZPU_IN2[7]   = zpu_readonly;
+wire  [2:0] atari_hotkeys;
+wire file_download = ioctl_download && ioctl_index != 99;
 
-assign ZPU_IN3 = zpu_lba ? zpu_filesize : zpu_buf_q;
-
-reg [8:0] zpu_buff_addr;
-reg       zpu_buf_wr;
-reg       zpu_io_done;
-reg       zpu_mounted = 0;
-reg [2:0] zpu_fileno;
-reg [1:0] zpu_filetype;
-reg       zpu_readonly;
-reg[31:0] zpu_filesize;
-
-wire      zpu_lba      = ZPU_OUT2[0];
-wire      zpu_block_rd = ZPU_OUT2[1];
-wire      zpu_block_wr = ZPU_OUT2[2];
-wire      zpu_io_wr    = ZPU_WR[5];
-wire      zpu_data_wr  = ZPU_WR[6];
-wire      zpu_data_rd  = ZPU_RD[2];
+wire [15:0] atari_status1;
+assign atari_status1 = {13'b0000000000000, atari_hotkeys};
 
 always @(posedge clk_sys) begin
-	reg old_wr, old_wr2, old_rd, old_lba;
-	reg old_blrd, old_blwr, old_ack;
-	reg old_mounted;
 
-	zpu_buf_wr <= 0;
-	if(zpu_buf_wr) zpu_buff_addr <= zpu_buff_addr + 1'd1;
+	reg started = 0;
 
-	old_wr <= zpu_data_wr;
-	old_wr2 <= old_wr;
-	if(~old_wr2 & old_wr) begin
-		if(zpu_lba) sd_lba <= ZPU_OUT3;
-		else zpu_buf_wr <= 1;
+	if(sdram_ready) begin
+		if(!started) begin
+			started <= 1;
+			ioctl_wait <= 0;
 	end
-
-	old_rd <= zpu_data_rd;
-	if(old_rd & ~zpu_data_rd) zpu_buff_addr <= zpu_buff_addr + 1'd1;
-
-	if(zpu_io_wr) zpu_buff_addr <= 0;
-
-	old_blrd <= zpu_block_rd;
-	if(~old_blrd & zpu_block_rd) {zpu_io_done,sd_rd} <= 1;
-
-	old_blwr <= zpu_block_wr;
-	if(~old_blwr & zpu_block_wr) {zpu_io_done,sd_wr} <= 1;
-
-	if(sd_ack) {sd_rd, sd_wr} <= 0;
-
-	old_ack <= sd_ack;
-	if(old_ack & ~sd_ack) zpu_io_done <= 1;
-
-	old_mounted <= img_mounted;
-	if(~old_mounted && img_mounted) begin
-		zpu_fileno <= 0;
-		zpu_filetype <= ioctl_index[7:6];
-		zpu_readonly <= 1;
-		zpu_mounted  <= ~zpu_mounted;
-		zpu_filesize <= img_size[31:0];
+		if(ioctl_index != 0 && ioctl_download) begin
+			if(dma_ready) begin
+				ioctl_wait <= 0;
+				dma_req <= 0;
+			end
+			if(ioctl_wr) begin
+				ioctl_wait <= 1;
+				dma_req <= 1;
+			end
+		end
+		else
+			ioctl_wait <= 0;
 	end
-	
-	if(reset) zpu_mounted <= |img_size[31:0];
 end
-
 
 //////////////////   ANALOG AXIS   ///////////////////
 reg         emu = 0;
@@ -635,7 +650,7 @@ wire [20:0] j0 = emu ? {joy_0[20:6], ps2_mouse[1:0], joy_0[3:0]} : joy_0;
 reg  signed [8:0] mx = 0;
 wire signed [8:0] mdx = {ps2_mouse[4],ps2_mouse[4],ps2_mouse[15:9]};
 wire signed [8:0] mdx2 = (mdx > 10) ? 9'd10 : (mdx < -10) ? -8'd10 : mdx;
-wire signed [8:0] nmx = mx + mdx2;
+wire signed [8:0] nmx = status[56] ? (mx - mdx2) : (mx + mdx2);
 
 reg  signed [8:0] my = 0;
 wire signed [8:0] mdy = {ps2_mouse[5],ps2_mouse[5],ps2_mouse[23:17]};
