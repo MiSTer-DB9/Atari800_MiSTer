@@ -22,7 +22,6 @@ ENTITY atari800core IS
 		video_bits : integer := 8;
 		palette : integer :=0; -- 0:gtia colour on VIDEO_B, 1:on
 		low_memory : integer := 0; -- 0:32MB memory map, 1:1MB memory map
-		covox : integer := 1;
 		sdram_start_bank : integer := 0
 	);
 	PORT
@@ -49,12 +48,11 @@ ENTITY atari800core IS
 		interlace_enable : in std_logic;
 
 
-		-- AUDIO OUT - Pokey/GTIA 1-bit and Covox all mixed
-		-- TODO - choose stereo/mono pokey
-		STEREO  : IN  STD_LOGIC;
+		POKEYMAX_CONFIG : IN STD_LOGIC_VECTOR(38 downto 0);
+		SIO_AUDIO : IN std_logic_vector(7 downto 0);
+		-- AUDIO OUT all mixed
 		AUDIO_L : OUT std_logic_vector(15 downto 0);
 		AUDIO_R : OUT std_logic_vector(15 downto 0);
-		SIO_AUDIO : IN std_logic_vector(7 downto 0);
 
 		-- PIA
 		CA1_IN : IN STD_LOGIC; -- SIO Proceed
@@ -182,15 +180,18 @@ ENTITY atari800core IS
 		EMU_FLASH_SLAVE : out std_logic;
 		PAL :  in STD_LOGIC;
 		CLIP_SIDES : in STD_LOGIC;
+		GTIA_XCOLOR : in STD_LOGIC;
 		ROM_IN_RAM : in std_logic;
 		THROTTLE_COUNT_6502 : in STD_LOGIC_VECTOR(5 DOWNTO 0);
 		HALT : in std_logic;
 		freezer_enable: in std_logic;
 		freezer_activate: in std_logic;
-		ATARI800MODE : in std_logic := '0';
+		ATARI800MODE : in std_logic;
+		ATARI800MODE_16K : in std_logic;
 		PBI_ROM_MODE : in std_logic := '0';
 		XEX_LOADER_MODE : in std_logic := '0';
 		RTC : IN STD_LOGIC_VECTOR(64 DOWNTO 0);
+		CLK_CONF : IN STD_LOGIC_VECTOR(2 DOWNTO 0);
 		VBXE_SWITCH : IN STD_LOGIC;
 		VBXE_REG_BASE : IN STD_LOGIC;
 		VBXE_NTSC_FIX : IN STD_LOGIC;
@@ -255,13 +256,21 @@ signal GTIA_PF0_OUT : std_logic_vector(7 downto 0);
 signal GTIA_PF1_OUT : std_logic_vector(7 downto 0);
 signal GTIA_PF2_OUT : std_logic_vector(7 downto 0);
 signal GTIA_PF3_OUT : std_logic_vector(7 downto 0);
-signal GTIA_XCOLOR : std_logic;
+signal VBXE_XCOLOR : std_logic;
 signal GTIA_PALETTE : std_logic_vector(1 downto 0);
 
 -- GTIA PALETTE
 signal VIDEO_R_GTIA : std_logic_vector(7 downto 0);
 signal VIDEO_G_GTIA : std_logic_vector(7 downto 0);
 signal VIDEO_B_GTIA : std_logic_vector(7 downto 0);
+
+-- VBXE memory
+signal vbxe_vram_addr : std_logic_vector(18 downto 0);
+signal vbxe_vram_data : std_logic_vector(7 downto 0);
+signal vbxe_vram_data_in : std_logic_vector(7 downto 0);
+signal vbxe_vram_request : std_logic;
+signal vbxe_vram_wr_en : std_logic;
+signal vbxe_vram_request_complete : std_logic;
 
 -- VBXE PALETTE
 signal VIDEO_R_VBXE : std_logic_vector(7 downto 0);
@@ -286,34 +295,7 @@ SIGNAL	R_W_N :  STD_LOGIC;
 SIGNAL	CPU_SHARED_ENABLE :  STD_LOGIC;
 SIGNAL	ENABLE_179_MEMWAIT :  STD_LOGIC;
 SIGNAL	ANTIC_ENABLE_179 :  STD_LOGIC;
-
--- POKEY
-SIGNAL	POKEY_IRQ :  STD_LOGIC;
-
-SIGNAL	POKEY_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
-SIGNAL	CACHE_POKEY_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
-SIGNAL	POKEY_WRITE_ENABLE :  STD_LOGIC;
-signal POKEY1_CHANNEL0 : std_logic_vector(3 downto 0);
-signal POKEY1_CHANNEL1 : std_logic_vector(3 downto 0);
-signal POKEY1_CHANNEL2 : std_logic_vector(3 downto 0);
-signal POKEY1_CHANNEL3 : std_logic_vector(3 downto 0);
-
-SIGNAL	POKEY2_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
-SIGNAL	CACHE_POKEY2_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
-SIGNAL	POKEY2_WRITE_ENABLE :  STD_LOGIC;
-signal POKEY2_CHANNEL0 : std_logic_vector(3 downto 0);
-signal POKEY2_CHANNEL1 : std_logic_vector(3 downto 0);
-signal POKEY2_CHANNEL2 : std_logic_vector(3 downto 0);
-signal POKEY2_CHANNEL3 : std_logic_vector(3 downto 0);
-signal AUDIO_L_pre : std_logic_vector(15 downto 0);
-signal AUDIO_R_pre : std_logic_vector(15 downto 0);
-
--- COVOX (after market DAC)
-signal covox_write_enable : std_logic;
-signal covox_channel0 : std_logic_vector(7 downto 0);
-signal covox_channel1 : std_logic_vector(7 downto 0);
-signal covox_channel2 : std_logic_vector(7 downto 0);
-signal covox_channel3 : std_logic_vector(7 downto 0);
+SIGNAL	ANTIC_ENABLE_179_DOUBLE :  STD_LOGIC;
 
 -- MEMORY IS READY - input to all devices
 SIGNAL	MEMORY_DATA :  STD_LOGIC_VECTOR(31 DOWNTO 0);
@@ -325,6 +307,17 @@ SIGNAL	WRITE_DATA :  STD_LOGIC_VECTOR(31 DOWNTO 0);
 SIGNAL	WIDTH_16BIT_ACCESS :  STD_LOGIC;
 SIGNAL	WIDTH_32BIT_ACCESS :  STD_LOGIC;
 SIGNAL	WIDTH_8BIT_ACCESS :  STD_LOGIC;
+
+-- POKEY
+SIGNAL	POKEY_DO : STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	DRIVE_POKEY_DO : STD_LOGIC;
+SIGNAL	CACHE_POKEY_DO : STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	POKEY_IRQ : STD_LOGIC;
+SIGNAL	POKEY_WRITE_ENABLE : STD_LOGIC;
+SIGNAL	POKEY_REQUEST : STD_LOGIC;
+
+-- COVOX mirror
+SIGNAL	D6_WRITE_ENABLE : STD_LOGIC;
 
 -- PIA
 SIGNAL	PIA_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
@@ -342,6 +335,7 @@ SIGNAL	ULTIME_WRITE_ENABLE : STD_LOGIC;
 -- VBXE
 SIGNAL	VBXE_SOFT_RESET : STD_LOGIC;
 SIGNAL	VBXE_DO : STD_LOGIC_VECTOR(7 downto 0);
+SIGNAL	CACHE_VBXE_DO : STD_LOGIC_VECTOR(7 downto 0);
 SIGNAL	VBXE_WRITE_ENABLE : STD_LOGIC;
 
 signal memac_address : std_logic_vector(15 downto 0);
@@ -353,8 +347,6 @@ signal memac_data_write : std_logic_vector(7 downto 0);
 signal memac_data_read : std_logic_vector(7 downto 0);
 signal memac_request : std_logic;
 signal memac_request_complete : std_logic;
-signal memac_dma_enable : std_logic;
-signal dma_fetch_vbxe_adj : std_logic;
 
 signal VBXE_IRQ_N : std_logic;
 
@@ -364,6 +356,20 @@ SIGNAL PBI_ADDR_INT : std_logic_vector(15 downto 0);
 -- cart
 signal cart_trig3_out: std_logic;
 
+-- PokeyMax sample engine
+
+signal SAMPLE_RAM_ADDRESS : std_logic_vector(15 downto 0);
+signal SAMPLE_RAM_WRITE_ENABLE : std_logic;
+signal SAMPLE_RAM_REQUEST : std_logic;
+signal SAMPLE_RAM_READY : std_logic;
+signal SAMPLE_RAM_WRITE_DATA : std_logic_vector(7 downto 0);
+
+-- PokeyMax SID data
+
+signal SID_ROM_ADDRESS : std_logic_vector(16 downto 0);
+signal SID_ROM_REQUEST : std_logic;
+signal SID_ROM_READY : std_logic;
+
 BEGIN 
 
 PBI_WIDTH_8bit_ACCESS <= WIDTH_8bit_access;
@@ -372,9 +378,6 @@ PBI_WIDTH_32bit_ACCESS <= WIDTH_32bit_access;
 PBI_WRITE_DATA <= WRITE_DATA;
 PBI_SNOOP_DATA <= MEMORY_DATA;
 PBI_SNOOP_READY <= MEMORY_READY_CPU or MEMORY_READY_ANTIC;
-
-dma_fetch_vbxe_adj <= 
-	dma_fetch and memac_dma_enable;
 
 enables : entity work.shared_enable
 GENERIC MAP(cycle_length => cycle_length)
@@ -386,6 +389,7 @@ PORT MAP(CLK => CLK,
 		 PAUSE_6502 => HALT,
 		 THROTTLE_COUNT_6502 => THROTTLE_COUNT_6502,
 		 ANTIC_ENABLE_179 => ANTIC_ENABLE_179,
+		 ANTIC_ENABLE_179_DOUBLE => ANTIC_ENABLE_179_DOUBLE,
 		 oldcpu_enable => ENABLE_179_MEMWAIT,
 		 CPU_ENABLE_OUT => CPU_SHARED_ENABLE);
 
@@ -434,44 +438,45 @@ PORT MAP(CLK => CLK,
 		 DATA_OUT => ANTIC_DO,
 		 dma_address_out => ANTIC_ADDR);
 
-pokey_mixer_both : entity work.pokey_mixer_mux
+pokeym : entity work.pokeymax
 PORT MAP(CLK => CLK,
-		 ENABLE_179 => ANTIC_ENABLE_179,
-		 GTIA_SOUND => GTIA_SOUND,
-		 SIO_AUDIO => SIO_AUDIO,
-		 CHANNEL_L_0 => POKEY1_CHANNEL0,
-		 CHANNEL_L_1 => POKEY1_CHANNEL1,
-		 CHANNEL_L_2 => POKEY1_CHANNEL2,
-		 CHANNEL_L_3 => POKEY1_CHANNEL3,
-		 COVOX_CHANNEL_L_0 => covox_channel0,
-		 COVOX_CHANNEL_L_1 => covox_channel1,
-		 CHANNEL_R_0 => POKEY2_CHANNEL0,
-		 CHANNEL_R_1 => POKEY2_CHANNEL1,
-		 CHANNEL_R_2 => POKEY2_CHANNEL2,
-		 CHANNEL_R_3 => POKEY2_CHANNEL3,
-		 COVOX_CHANNEL_R_0 => covox_channel2,
-		 COVOX_CHANNEL_R_1 => covox_channel3,
-		 VOLUME_OUT_L => AUDIO_L_pre,
-		 VOLUME_OUT_R => AUDIO_R_pre);
-
-AUDIO_L <= AUDIO_L_pre;
-AUDIO_R <= AUDIO_R_pre when STEREO = '1' else AUDIO_L_pre;
-
-pokey2 : entity work.pokey
-PORT MAP(CLK => CLK,
-		 ENABLE_179 => ANTIC_ENABLE_179,
-		 WR_EN => POKEY2_WRITE_ENABLE,
-		 RESET_N => RESET_N,
-		 ADDR => PBI_ADDR_INT(3 DOWNTO 0),
-		 DATA_IN => WRITE_DATA(7 DOWNTO 0),
-		 CHANNEL_0_OUT => POKEY2_CHANNEL0,
-		 CHANNEL_1_OUT => POKEY2_CHANNEL1,
-		 CHANNEL_2_OUT => POKEY2_CHANNEL2,
-		 CHANNEL_3_OUT => POKEY2_CHANNEL3,
-		 DATA_OUT => POKEY2_DO,
-		 SIO_IN1 => '1',
-		 keyboard_response => "00",
-		 pot_in=>"00000000");
+	RESET_N => RESET_N,
+	ENABLE_179 => ANTIC_ENABLE_179,
+	ENABLE_179_DOUBLE => ANTIC_ENABLE_179_DOUBLE,
+	ADDR => PBI_ADDR_INT(7 downto 0),
+	DATA_IN => WRITE_DATA(7 downto 0),
+	REQUEST => POKEY_REQUEST,
+	WR_EN => POKEY_WRITE_ENABLE,
+	D6_WR_EN => D6_WRITE_ENABLE,
+	DATA_OUT => POKEY_DO,
+	DRIVE_DATA_OUT => DRIVE_POKEY_DO,
+	KEYBOARD_SCAN => KEYBOARD_SCAN,
+	KEYBOARD_RESPONSE => KEYBOARD_RESPONSE,
+	POT_IN => POT_IN,
+	POT_RESET => POT_RESET,
+	IRQ_N_OUT => POKEY_IRQ,
+	SIO_IN1 => SIO_RXD,
+	SIO_OUT1 => SIO_TXD,
+	SIO_CLOCKIN_IN => SIO_CLOCKIN_IN,
+	SIO_CLOCKIN_OUT => SIO_CLOCKIN_OUT,
+	SIO_CLOCKIN_OE => SIO_CLOCKIN_OE,
+	SIO_CLOCKOUT => SIO_CLOCKOUT,
+	INIT_CONFIG => POKEYMAX_CONFIG,
+	GTIA_SOUND => GTIA_SOUND,
+	SIO_SOUND => SIO_AUDIO,
+	AUDIO_L => AUDIO_L,
+	AUDIO_R => AUDIO_R,
+	SAMPLE_RAM_ADDRESS => SAMPLE_RAM_ADDRESS,
+	SAMPLE_RAM_WRITE_ENABLE => SAMPLE_RAM_WRITE_ENABLE,
+	SAMPLE_RAM_REQUEST => SAMPLE_RAM_REQUEST,
+	SAMPLE_RAM_READY => SAMPLE_RAM_READY,
+	SAMPLE_RAM_READ_DATA => SDRAM_DO(7 downto 0),
+	SAMPLE_RAM_WRITE_DATA => SAMPLE_RAM_WRITE_DATA,
+	SID_ROM_ADDRESS => SID_ROM_ADDRESS,
+	SID_ROM_REQUEST => SID_ROM_REQUEST,
+	SID_ROM_READY => SID_ROM_READY,
+	SID_ROM_READ_DATA => SDRAM_DO(31 downto 0)
+);
 
 pia1 : entity work.pia
 PORT MAP(CLK => CLK,
@@ -506,7 +511,20 @@ PORT MAP(
 	DATA_IN => WRITE_DATA(7 DOWNTO 0),
 	WR_EN => ULTIME_WRITE_ENABLE,
 	DATA_OUT => ULTIME_DO,
-	RTC_IN => RTC
+	RTC_IN => RTC,
+	CLK_CONF => CLK_CONF
+);
+
+vbxe_memory : entity work.large_bram
+PORT MAP(
+	clk => CLK,
+	reset_n => RESET_N,
+	data => vbxe_vram_data,
+	address => vbxe_vram_addr,
+	req => vbxe_vram_request,
+	we => vbxe_vram_wr_en,
+	ready => vbxe_vram_request_complete,
+	q => vbxe_vram_data_in
 );
 
 vbxe_board : entity work.VBXE
@@ -531,6 +549,14 @@ PORT MAP(
 	VBXE_UPLOAD_PALETTE_RGB => VBXE_PALETTE_RGB,
 	VBXE_UPLOAD_PALETTE_INDEX => VBXE_PALETTE_INDEX,
 	VBXE_UPLOAD_PALETTE_COLOR => VBXE_PALETTE_COLOR,
+
+	vram_addr => vbxe_vram_addr,
+	vram_data => vbxe_vram_data,
+	vram_data_in => vbxe_vram_data_in,
+	vram_request => vbxe_vram_request,
+	vram_wr_en => vbxe_vram_wr_en,
+	vram_request_complete => vbxe_vram_request_complete,
+
 	memac_address => memac_address,
 	memac_write_enable => memac_write_enable,
 	memac_cpu_access => memac_cpu_access,
@@ -540,7 +566,6 @@ PORT MAP(
 	memac_data_out => memac_data_read,
 	memac_request => memac_request,
 	memac_request_complete => memac_request_complete,
-	memac_dma_enable => memac_dma_enable,
 	memac_dma_address => dma_addr,
 	irq_n => VBXE_IRQ_N,
 	video_clock_antic_lowres => ANTIC_COLOUR_CLOCK_OUT,
@@ -563,7 +588,7 @@ PORT MAP(
 	ov_palette => VBXE_OV_PALETTE,
 	ov_pixel => VBXE_OV_PIXEL,
 	ov_pixel_active => VBXE_OV_PIXEL_ACTIVE,
-	xcolor => GTIA_XCOLOR,
+	xcolor => VBXE_XCOLOR,
 	VSYNC => GTIA_VSYNC,
 	GTIA_HPOS => GTIA_HPOS
 );
@@ -574,11 +599,19 @@ PORT MAP(CLK => CLK,
 		 CPU_FETCH => CPU_FETCH,
 		 CPU_WRITE_N => R_W_N,
 		 ANTIC_FETCH => ANTIC_FETCH,
-		 DMA_FETCH => dma_fetch_vbxe_adj,
+		 DMA_FETCH => dma_fetch,
 		 DMA_READ_ENABLE => DMA_READ_ENABLE,
 		 DMA_32BIT_WRITE_ENABLE => DMA_32BIT_WRITE_ENABLE,
 		 DMA_16BIT_WRITE_ENABLE => DMA_16BIT_WRITE_ENABLE,
 		 DMA_8BIT_WRITE_ENABLE => DMA_8BIT_WRITE_ENABLE,
+		 SAMPLE_RAM_ADDRESS => SAMPLE_RAM_ADDRESS,
+		 SAMPLE_RAM_WRITE_ENABLE => SAMPLE_RAM_WRITE_ENABLE,
+		 SAMPLE_RAM_REQUEST => SAMPLE_RAM_REQUEST,
+		 SAMPLE_RAM_READY => SAMPLE_RAM_READY,
+		 SAMPLE_RAM_WRITE_DATA => SAMPLE_RAM_WRITE_DATA,
+		 SID_ROM_ADDRESS => SID_ROM_ADDRESS,
+		 SID_ROM_REQUEST => SID_ROM_REQUEST,
+		 SID_ROM_READY => SID_ROM_READY,
 		 RAM_REQUEST_COMPLETE => RAM_REQUEST_COMPLETE,
 		 ROM_REQUEST_COMPLETE => ROM_REQUEST_COMPLETE,
 		 PBI_REQUEST_COMPLETE => PBI_REQUEST_COMPLETE,
@@ -601,10 +634,8 @@ PORT MAP(CLK => CLK,
 		 CACHE_GTIA_DATA => CACHE_GTIA_DO,
 		 PIA_DATA => PIA_DO,
 		 ULTIME_DATA => ULTIME_DO,
-		 STEREO => STEREO,
-		 POKEY2_DATA => POKEY2_DO,
-		 CACHE_POKEY2_DATA => CACHE_POKEY2_DO,
 		 POKEY_DATA => POKEY_DO,
+		 DRIVE_POKEY_DATA => DRIVE_POKEY_DO,
 		 CACHE_POKEY_DATA => CACHE_POKEY_DO,
 		 PORTB => PORTB_OPTIONS,
 		 RAM_DATA => RAM_DO,
@@ -612,6 +643,7 @@ PORT MAP(CLK => CLK,
 		 VBXE_SWITCH => VBXE_SWITCH,
 		 VBXE_REG_BASE => VBXE_REG_BASE,
 		 VBXE_DATA => VBXE_DO,
+		 CACHE_VBXE_DATA => CACHE_VBXE_DO,
 		 VBXE_WRITE_ENABLE => VBXE_WRITE_ENABLE,
 		 VBXE_SOFT_RESET => VBXE_SOFT_RESET,
 		 memac_address => memac_address,
@@ -626,6 +658,7 @@ PORT MAP(CLK => CLK,
 
 		 ram_select => RAM_SELECT(2 downto 0),
 		 ATARI800MODE => ATARI800MODE,
+		 ATARI800MODE_16K => ATARI800MODE_16K,
 		 PBI_ROM_MODE => PBI_ROM_MODE,
 		 XEX_LOADER_MODE => XEX_LOADER_MODE,
 		 ROM_DATA => ROM_DO,
@@ -637,10 +670,11 @@ PORT MAP(CLK => CLK,
 		 MEMORY_READY_CPU => MEMORY_READY_CPU,
 		 GTIA_WR_ENABLE => GTIA_WRITE_ENABLE,
 		 POKEY_WR_ENABLE => POKEY_WRITE_ENABLE,
-		 POKEY2_WR_ENABLE => POKEY2_WRITE_ENABLE,
+		 POKEY_REQ => POKEY_REQUEST,
 		 ANTIC_WR_ENABLE => ANTIC_WRITE_ENABLE,
 		 PIA_WR_ENABLE => PIA_WRITE_ENABLE,
 		 PIA_RD_ENABLE => PIA_READ_ENABLE,
+		 D6_WR_ENABLE => D6_WRITE_ENABLE,
 		 ULTIME_WR_ENABLE => ULTIME_WRITE_ENABLE,
 		 RAM_WR_ENABLE => RAM_WRITE_ENABLE,
 		 ROM_WR_ENABLE => ROM_WRITE_ENABLE,
@@ -661,7 +695,6 @@ PORT MAP(CLK => CLK,
 		 ROM_ADDR => ROM_ADDR,
 		 SDRAM_ADDR => SDRAM_ADDR,
 		 WRITE_DATA => WRITE_DATA,
-		 d6_wr_enable => covox_write_enable,
 		 cart_select => CART_EMULATION_SELECT,
 		 cart2_select => CART2_EMULATION_SELECT,
 		 emu_flash_request => EMU_FLASH_REQUEST,
@@ -671,7 +704,6 @@ PORT MAP(CLK => CLK,
 		 freezer_activate => freezer_activate,
 		 freezer_state_out => freezer_state_out,
 		 state_reg_out => state_reg_out);
-
 
 	process(ATARI800MODE,GTIA_TRIG,PORTB_OUT_INT,CART_TRIG3_OUT)
 	begin
@@ -687,34 +719,7 @@ PORT MAP(CLK => CLK,
 		end if;
 	end process;
 
-pokey1 : entity work.pokey
-PORT MAP(CLK => CLK,
-		 ENABLE_179 => ANTIC_ENABLE_179,
-		 WR_EN => POKEY_WRITE_ENABLE,
-		 RESET_N => RESET_N,
-		 SIO_IN1 => SIO_RXD,
-		 SIO_CLOCKIN_IN => SIO_CLOCKIN_IN,
-		 SIO_CLOCKIN_OUT => SIO_CLOCKIN_OUT,
-		 SIO_CLOCKIN_OE => SIO_CLOCKIN_OE,
-		 ADDR => PBI_ADDR_INT(3 DOWNTO 0),
-		 DATA_IN => WRITE_DATA(7 DOWNTO 0),
-		 keyboard_response => KEYBOARD_RESPONSE,
-		 POT_IN => POT_IN,
-		 IRQ_N_OUT => POKEY_IRQ,
-		 SIO_OUT1 => SIO_TXD,
-		 SIO_OUT2 => open,
-		 SIO_OUT3 => open,
-		 SIO_CLOCKOUT => SIO_CLOCKOUT,
-		 POT_RESET => POT_RESET,
-		 CHANNEL_0_OUT => POKEY1_CHANNEL0,
-		 CHANNEL_1_OUT => POKEY1_CHANNEL1,
-		 CHANNEL_2_OUT => POKEY1_CHANNEL2,
-		 CHANNEL_3_OUT => POKEY1_CHANNEL3,
-		 DATA_OUT => POKEY_DO,
-		 keyboard_scan => KEYBOARD_SCAN);
-
 CONSOL_IN <= '1'&CONSOL_OPTION&CONSOL_SELECT&CONSOL_START;
-
 		 	 
 gtia1 : entity work.gtia
 PORT MAP(CLK => CLK,
@@ -748,7 +753,7 @@ PORT MAP(CLK => CLK,
 		 VBXE_OV_PIXEL => VBXE_OV_PIXEL,
 		 VBXE_OV_PIXEL_ACTIVE => VBXE_OV_PIXEL_ACTIVE,
 		 PALETTE_out => GTIA_PALETTE,
-		 XCOLOR => GTIA_XCOLOR,
+		 XCOLOR_IN => GTIA_XCOLOR or VBXE_XCOLOR,
 		 GTIA_VSYNC => GTIA_VSYNC,
 		 HPOS_OUT => GTIA_HPOS,
 
@@ -802,26 +807,15 @@ PORT MAP(pokey_irq => POKEY_IRQ,
 		 vbxe_irq => VBXE_IRQ_N,
 		 combined_irq => IRQ_n);
 		 
--- TODO - generic ram infer?
-pokey1_mirror : entity work.reg_file
-generic map(BYTES=>16,WIDTH=>4)
+pokey_mirror : entity work.reg_file
+generic map(BYTES=>256,WIDTH=>8)
 port map(
 	CLK => CLK,
-	ADDR => PBI_ADDR_INT(3 downto 0),
+	ADDR => PBI_ADDR_INT(7 downto 0),
 	DATA_IN => WRITE_DATA(7 downto 0),
 	WR_EN => POKEY_WRITE_ENABLE,
 	DATA_OUT => CACHE_POKEY_DO
-);	 
-
-pokey2_mirror : entity work.reg_file
-generic map(BYTES=>16,WIDTH=>4)
-port map(
-	CLK => CLK,
-	ADDR => PBI_ADDR_INT(3 downto 0),
-	DATA_IN => WRITE_DATA(7 downto 0),
-	WR_EN => POKEY2_WRITE_ENABLE,
-	DATA_OUT => CACHE_POKEY2_DO
-);	 		 
+);
 
 gtia_mirror : entity work.reg_file
 generic map(BYTES=>32,WIDTH=>5)
@@ -831,7 +825,7 @@ port map(
 	DATA_IN => WRITE_DATA(7 downto 0),
 	WR_EN => GTIA_WRITE_ENABLE,
 	DATA_OUT => CACHE_GTIA_DO
-);	
+);
 
 antic_mirror : entity work.reg_file
 generic map(BYTES=>16,WIDTH=>4)
@@ -841,30 +835,17 @@ port map(
 	DATA_IN => WRITE_DATA(7 downto 0),
 	WR_EN => ANTIC_WRITE_ENABLE,
 	DATA_OUT => CACHE_ANTIC_DO
-);	
+);
 
-gen_covox_off : if covox=0 generate
-	COVOX_CHANNEL0 <= (others=>'0');
-	COVOX_CHANNEL1 <= (others=>'0');
-	COVOX_CHANNEL2 <= (others=>'0');
-	COVOX_CHANNEL3 <= (others=>'0');
-end generate;
-
-gen_covox_on : if covox=1 generate
-covox1 : entity work.covox
-	PORT map
-	( 
-		clk => clk,
-		reset_n => reset_n,
-		addr => pbi_addr_int(1 downto 0),
-		data_in => WRITE_DATA(7 DOWNTO 0),
-		wr_en => covox_write_enable,
-		covox_channel0 => covox_channel0,
-		covox_channel1 => covox_channel1,
-		covox_channel2 => covox_channel2,
-		covox_channel3 => covox_channel3
-	);
-end generate;
+vbxe_mirror : entity work.reg_file
+generic map(BYTES=>32,WIDTH=>5)
+port map(
+	CLK => CLK,
+	ADDR => PBI_ADDR_INT(4 downto 0),
+	DATA_IN => WRITE_DATA(7 downto 0),
+	WR_EN => VBXE_WRITE_ENABLE,
+	DATA_OUT => CACHE_VBXE_DO
+);
 
 -- outputs
 PBI_ADDR <= PBI_ADDR_INT;

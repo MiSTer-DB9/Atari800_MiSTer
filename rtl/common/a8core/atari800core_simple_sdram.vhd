@@ -38,10 +38,7 @@ ENTITY atari800core_simple_sdram is
 		internal_ram : integer := 0;  -- at start of memory map
 	
 		-- Use 1MB memory map if low memory set (for Aeon lite)
-		low_memory : integer := 0;
-
-		-- resistor ladder style 8-bit sample thing
-		covox : integer := 1
+		low_memory : integer := 0
 	);
 	PORT
 	(
@@ -68,9 +65,8 @@ ENTITY atari800core_simple_sdram is
 		HBLANK : OUT STD_LOGIC;
 		VBLANK : OUT STD_LOGIC;
 
-		-- AUDIO OUT - Pokey/GTIA 1-bit and Covox all mixed
-		-- TODO - choose stereo/mono pokey
-		STEREO : IN  STD_LOGIC;
+		POKEYMAX_CONFIG : IN STD_LOGIC_VECTOR(38 downto 0);
+		-- AUDIO OUT - all audio mix mixed
 		AUDIO_L : OUT std_logic_vector(15 downto 0);
 		AUDIO_R : OUT std_logic_vector(15 downto 0);
 
@@ -154,11 +150,14 @@ ENTITY atari800core_simple_sdram is
 		RAM_SELECT : in std_logic_vector(2 downto 0); -- 64K,128K,320KB Compy, 320KB Rambo, 576K Compy, 576K Rambo, 1088K, 4MB
 		PAL :  in STD_LOGIC;
 		CLIP_SIDES : in STD_LOGIC;
+		GTIA_XCOLOR : in STD_LOGIC;
 		RESET_RNMI : in STD_LOGIC;
-		ATARI800MODE : in STD_LOGIC := '0';
+		ATARI800MODE : in STD_LOGIC;
+		ATARI800MODE_16K : in STD_LOGIC;
 		PBI_ROM_MODE : in STD_LOGIC := '0';
 		XEX_LOADER_MODE : in STD_LOGIC := '0';
 		RTC : in std_logic_vector(64 downto 0);
+		CLK_CONF : in std_logic_vector(2 downto 0);
 		VBXE_SWITCH : IN STD_LOGIC := '0';
 		VBXE_REG_BASE : IN STD_LOGIC := '0';
 		VBXE_NTSC_FIX : IN STD_LOGIC := '0';
@@ -415,7 +414,6 @@ GENERIC MAP
 	video_bits => video_bits,
 	palette => palette,
 	low_memory => low_memory,
-	covox => covox,
 	sdram_start_bank => internal_ram/16384
 )
 PORT MAP
@@ -441,7 +439,7 @@ PORT MAP
 	HBLANK => HBLANK,
 	VBLANK => VBLANK,
 
-	STEREO => STEREO,
+	POKEYMAX_CONFIG => POKEYMAX_CONFIG,
 	AUDIO_L => AUDIO_L,
 	AUDIO_R => AUDIO_R,
 	SIO_AUDIO => TAPE_AUDIO,
@@ -537,10 +535,13 @@ PORT MAP
 	EMU_FLASH_SLAVE => EMU_FLASH_SLAVE,
 	PAL => PAL,
 	CLIP_SIDES => CLIP_SIDES,
+	GTIA_XCOLOR => GTIA_XCOLOR,
 	ATARI800MODE => ATARI800MODE,
+	ATARI800MODE_16K => ATARI800MODE_16K,
 	PBI_ROM_MODE => PBI_ROM_MODE,
 	XEX_LOADER_MODE => XEX_LOADER_MODE,
 	RTC => RTC,
+	CLK_CONF => CLK_CONF,
 	VBXE_SWITCH => VBXE_SWITCH,
 	VBXE_REG_BASE => VBXE_REG_BASE,
 	VBXE_NTSC_FIX => VBXE_NTSC_FIX,

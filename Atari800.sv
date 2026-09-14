@@ -299,12 +299,12 @@ wire [5:0] CPU_SPEEDS[8] ='{6'd1,6'd2,6'd4,6'd8,6'd16,6'd0,6'd0,6'd0};
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// X XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX   XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+// X XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 //                                      1         1         1
 // 6     7         8         9          0         1         2
 // 45678901234567890123456789012345 67890123456789012345678901234567
-// XXXXXXXX                                                         
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX   XXXXX             
 
 
 `include "build_id.v" 
@@ -344,9 +344,9 @@ localparam CONF_STR = {
 	"P1O[12:10],SIO drive speed,Standard,Fast-6,Fast-5,Fast-4,Fast-3,Fast-2,Fast-1,Fast-0;",
 	"P1O[38],ATX drive timing,1050,810;",
 	"P1-;",
-	"P1O[69],On cart (u)mount,PwrReset,Nothing;",
-	"P1O[70],Cart auto-save,Disabled,Enabled;",
-	"P1R[71],Save cart(s);",
+	"P1O[68],On cart (u)mount,PwrReset,Nothing;",
+	"P1O[69],Cart auto-save,Disabled,Enabled;",
+	"P1R[70],Save cart(s);",
 	"P1-;",
 	"P1O[66:64],Tape turbo system,Standard,SIO/Cmd,Turbo-D,K.S.O.,K.S.O. 2,Blizzard,Rambit,T6000;",
 	"P1O[67],Invert turbo PWM,Disabled,Enabled;",
@@ -355,6 +355,7 @@ localparam CONF_STR = {
 	"P2O[9:7],CPU speed,1x,2x,4x,8x,16x;",
 	"P2-;",
 	"P2O[2],Machine,XL/XE,400/800;",
+	"d1P2O[110],400/800 OS ROM type,10KB,16KB;",
 	"H1P2O[15:13],RAM XL,64K,128K,320K(Compy),320K(Rambo),576K(Compy),576K(Rambo),1MB,4MB(Axlon);",
 	"h1P2O[37:35],RAM 800,8K,16K,32K,48K,52K,4MB(Axlon);",
 	"d5P2O[42],PBI BIOS,Disabled,Enabled;",
@@ -363,18 +364,21 @@ localparam CONF_STR = {
 	"P2-;",
 	"P2O[41],Use bootX.rom,Enabled,Disabled;",
 	"P2-;",
-	"P2FC4,ROMBIN,XL/XE OS;",
+	"P2FC4,ROMBIN,OS 16K;",
 	"P2FC5,ROMBIN,Basic;",
-	"P2FC6,ROMBIN,OS-A/B;",
+	"P2FC6,ROMBIN,OS 10K (400/800);",
 	"P2FC3,ROMBIN,TurboFreezer;",
 	"P3,Video;",
 	"P3-;",
 	"P3O[5],Video mode,PAL,NTSC;",
+	"hCP3O[112:111],NTSC rate Hz,59.92,59.94,60;",
+	"HCP3O[113],PAL rate Hz,49.86,50;",
 	"P3O[62:61],Interlace hack,Disabled,Weave,Bob;",
 	"P3-;",
+	"DBP3O[114],GTIA xcolor,Off,On;",
 	"P3O[60:59],VBXE,Disabled,$D640,$D740;",
-	"P3O[63],Fix VBXE NTSC bug,Disabled,Enabled;",
-	"P3FC2,ACT,VBXE Palette;",
+	"dBP3O[63],Fix VBXE NTSC bug,Disabled,Enabled;",
+	"dBP3FC2,ACT,VBXE Palette;",
 	"P3-;",
 	"P3O[23:22],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"P3O[19:17],Scandoubler FX,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
@@ -387,9 +391,43 @@ localparam CONF_STR = {
 	"d0P3O[28:25],Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;",
 	"P4,Audio;",
 	"P4-;",
-	"P4O[20],Dual Pokey,Disabled,Enabled;",
-	"P4O[4:3],Stereo mix,None,25%,50%,100%;",
-	"P4O[68],Tape sounds,Enabled,Disabled;",
+	"P4O[4:3],Stereo mix (sys),None,25%,50%,100%;",
+	"P4O[20],PokeyMax,Off/Mono,Enabled;",
+	// Since there is no alternative for this really, Main loads this automatically
+	// from a name fixed file
+	//"P4FC7,ROMBIN,SID wave data;",
+	"P4-;",
+	"d6P4O[71],Mono detect,On,Off;",
+	"P4O[32],Output Left Channel,On,Off;",
+	"P4O[33],Output Right Channel,On,Off;",
+	"P4O[73:72],Post-divide Left,4,8,1,2;",
+	"P4O[75:74],Post-divide Right,4,8,1,2;",
+	"P4O[77:76],GTIA mix-in,Left+Right,None,Left,Right;",
+	"P4O[79:78],Tape volume,2x,4x,0x,1x;",
+	"P4-;",
+	"d6P4O[81:80],Number of Pokeys,4,1,2;",
+	"P4O[82],Pokey volume,Saturated,Linear;",
+	"P4O[83],Channel mode,Normal,Split;",
+	"d6P4O[84],Multi IRQs,Off,On;",
+	"P4-;",
+	"d6P4O[85],SIDs,Enabled,Disabled;",
+	"d7P4O[86],SID1 filter,8580,6581;",
+	"d7P4O[87],SID2 filter,8580,6581;",
+	"d7P4O[89:88],SID1 DFix/audio-in,DigiFix,None,Mixer LB;",
+	"d7P4O[91:90],SID2 DFix/audio-in,DigiFix,None,Mixer LB;",
+	"P4-;",
+	"d6P4O[95],Covox/Sample,Enabled,Disabled;",
+	"P4-;",
+	"dAP4O[94:92],SID/CVX1+2 LB src,Pokey1+2,Pokey3+4,Covox,SID,PSG,GTIA,Tape;",
+	"d8P4O[98:96],Covox3+4 LB src,Pokey3+4,Covox,SID,PSG,GTIA,Tape,Pokey1+2;",
+	"P4-;",
+	"d6P4O[99],PSGs,Enabled,Disabled;",
+	"d9P4O[101:100],PSG clock,2MHz,1MHz,1.79MHz;",
+	"d9P4O[103:102],PSG stereo,Polish,Czech,By chip,Mono;",
+	"d9P4O[104],PSG envelope,32 steps,16 steps;",
+	"d9P4O[106:105],PSG volume,Log 0,Log 1,Log 2,Linear;",
+	"P4-;",
+	"P4-,      (Reset to apply);",
 	"P5,Input;",
 	"P5-;",
 	"P5O[21],Swap Joysticks 1&2,No,Yes;",
@@ -404,7 +442,9 @@ localparam CONF_STR = {
 	"V,v",`BUILD_DATE
 };
 
-////////////////////   CLOCKS   ///////////////////
+//////////////////// (Video) CLOCKS ///////////////////
+
+wire [2:0] video_hz_config = pal_video ? {2'b10,pal_hz} : {1'b0,ntsc_hz};
 
 wire locked;
 wire clk_sys;
@@ -418,8 +458,70 @@ pll pll
 	.outclk_0(clk_sys),
 	.outclk_1(clk_mem),
 	.outclk_2(clk_vdo),
+	.reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll),
 	.locked(locked)
 );
+
+wire [63:0] reconfig_to_pll;
+wire [63:0] reconfig_from_pll;
+wire        cfg_waitrequest;
+reg         cfg_write;
+reg   [5:0] cfg_address;
+reg  [31:0] cfg_data;
+
+pll_cfg pll_cfg
+(
+	.mgmt_clk(CLK_50M),
+	.mgmt_reset(0),
+	.mgmt_waitrequest(cfg_waitrequest),
+	.mgmt_read(0),
+	.mgmt_readdata(),
+	.mgmt_write(cfg_write),
+	.mgmt_address(cfg_address),
+	.mgmt_writedata(cfg_data),
+	.reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll)
+);
+
+always @(posedge CLK_50M) begin : cfg_block
+	reg [2:0] vcnf = 3'b000, vcnf_prev = 3'b000;
+	reg [2:0] state = 0;
+
+	vcnf <= video_hz_config;
+	vcnf_prev <= vcnf;
+
+	cfg_write <= 0;
+	if(vcnf_prev != vcnf) state <= 1;
+
+	if(!cfg_waitrequest) begin
+		if(state) state <= state+1'd1;
+		case(state)
+			1: begin
+				cfg_address <= 0;
+				cfg_data <= 0;
+				cfg_write <= 1;
+			end
+			3: begin
+				cfg_address <= 7;
+				case(vcnf_prev)
+					3'b100: cfg_data <= 343806291;
+					3'b101: cfg_data <= 452723913;
+					3'b000: cfg_data <= 702813244;
+					3'b001: cfg_data <= 714143711;
+					3'b010: cfg_data <= 753550208;
+					default: cfg_data <= 0;
+				endcase
+				cfg_write <= 1;
+			end
+			5: begin
+				cfg_address <= 2;
+				cfg_data <= 0;
+				cfg_write <= 1;
+			end
+		endcase
+	end
+end
 
 wire reset = RESET;
 
@@ -493,6 +595,52 @@ wire [31:0] joy_3 = joydb_1ena ? joy_1_USB : joydb_2ena ? joy_2_USB : joy_3_USB;
 
 
 
+
+wire       pokeymax_enable = status[20];
+wire [1:0] pokeymax_channel_en = { ~status[33], ~status[32] };
+wire       pokeymax_mono_detect = ~status[71];
+wire [3:0] pokeymax_post_divide = { status[75:74] + 2'b10, status[73:72] + 2'b10 };
+wire [1:0] pokeymax_gtia_mix = status[77:76] + 2'b11;
+wire [1:0] pokeymax_adc_vol = status[79:78] + 2'b10;
+wire [1:0] pokeymax_pokey_restrict = status[81:80] == 2'b00 ? 2'b11 : status[81:80] - 2'b01;
+wire       pokeymax_volume = ~status[82];
+wire       pokeymax_channel_mode = status[83];
+wire       pokeymax_irqs = status[84];
+wire       pokeymax_sid_restrict = ~status[85];
+wire [2:0] pokeymax_sid1_filter = { status[89] ? status[89:88] : { 1'b0, ~status[88] }, status[86] };
+wire [2:0] pokeymax_sid2_filter = { status[91] ? status[91:90] : { 1'b0, ~status[90] }, status[87] };
+wire [2:0] pokeymax_mix_sel1 = status[94:92] < 3'b101 ? status[94:92] : status[94:92] + 3'b001;
+wire [2:0] pokeymax_mix_sel2 = status[98:96] < 3'b100 ? status[98:96] + 3'b001 : status[98:96] + 3'b010;
+wire       pokeymax_covox_restrict = ~status[95];
+wire       pokeymax_psg_restrict = ~status[99];
+wire [1:0] pokeymax_psg_freq = status[101:100];
+wire [1:0] pokeymax_psg_stereo = status[103:102] + 2'b01;
+wire       pokeymax_psg_envelope = status[104];
+wire [1:0] pokeymax_psg_volume = status[106:105];
+
+wire [38:0] pokeymax_config = {
+	pokeymax_mix_sel2,			// 38:36
+	pokeymax_mix_sel1,			// 35:33
+	pokeymax_psg_stereo,		// 32:31
+	pokeymax_psg_envelope,		// 30
+	pokeymax_psg_volume,		// 29:28
+	pokeymax_psg_freq,			// 27:26
+	pokeymax_sid2_filter,		// 25:23
+	pokeymax_sid1_filter,		// 22:20
+	pokeymax_covox_restrict,	// 19
+	pokeymax_psg_restrict,		// 18
+	pokeymax_sid_restrict,		// 17
+	pokeymax_pokey_restrict,	// 16:15
+	pokeymax_irqs,				// 14
+	pokeymax_volume,			// 13
+	pokeymax_channel_mode,		// 12
+	pokeymax_adc_vol,			// 11:10
+	pokeymax_gtia_mix,			// 9:8
+	pokeymax_post_divide,		// 7:4
+	pokeymax_channel_en,		// 3:2
+	pokeymax_mono_detect,		// 1
+	pokeymax_enable				// 0
+};
 
 wire file_download = ioctl_download && (ioctl_index != 99);
 
@@ -574,7 +722,21 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(8)) hps_io
 
 	.buttons(buttons),
 	.status(status),
-	.status_menumask({~status[2] & pbi_rom_loaded, status[31] & status[5], status[5] & ~status[59] & ~status[60], ~status[2] & status[42] & pbi_rom_loaded, status[2], en216p}),
+	.status_menumask({
+		menu_ntsc, // C
+		menu_vbxe, // B
+		pokeymax_enable & (pokeymax_covox_restrict | pokeymax_sid_restrict), // A
+		pokeymax_enable & pokeymax_psg_restrict, // 9
+		pokeymax_enable & pokeymax_covox_restrict, // 8
+		pokeymax_enable & pokeymax_sid_restrict, // 7
+		pokeymax_enable, // 6
+		~menu_mode800 & pbi_rom_loaded, // 5
+		menu_ntsc & ~menu_vbxe & menu_artifacting, // 4
+		menu_ntsc & ~menu_vbxe, // 3
+		~menu_mode800 & menu_pbibios & pbi_rom_loaded, // 2
+		menu_mode800, // 1
+		en216p // 0
+	}),
 	.forced_scandoubler(forced_scandoubler),
 	.gamma_bus(gamma_bus),
 
@@ -613,7 +775,8 @@ hps_ext hps_ext
 	.cart2_select(cart2_select),
 	.atari_status1(atari_status1),
 	.atari_status2(atari_status2),
-	
+	.atari_status3(atari_status3),
+
 	.uart_addr(uart_addr),
 	.uart_enable(uart_enable),
 	.uart_wr(uart_wr),
@@ -625,9 +788,9 @@ hps_ext hps_ext
 
 	.emu_flash_request(emu_flash_request),
 	.emu_flash_slave(emu_flash_slave),
-	.emu_flash_autosave(status[70] & ~status[57]),
-	.emu_flash_save(status[71]),
-	.emu_cart_trigger(~status[69])
+	.emu_flash_autosave(status[69] & ~status[57]),
+	.emu_flash_save(status[70]),
+	.emu_cart_trigger(~status[68])
 );
 
 wire [7:0] R,G,B, Ro,Go,Bo;
@@ -641,8 +804,8 @@ assign CLK_VIDEO = clk_vdo;
 wire cpu_halt;
 
 wire [15:0] laudio, raudio;
-assign AUDIO_L = (cpu_halt | areset | reset) ? 16'b0000000000000000 : {laudio[15],laudio[15:1]};
-assign AUDIO_R = (cpu_halt | areset | reset) ? 16'b0000000000000000 : (status[20] ? {raudio[15],raudio[15:1]} : AUDIO_L);
+assign AUDIO_L = (cpu_halt | areset | reset) ? 16'b0000000000000000 : laudio;
+assign AUDIO_R = (cpu_halt | areset | reset) ? 16'b0000000000000000 : raudio;
 assign AUDIO_S = 1;
 assign AUDIO_MIX = status[4:3];
 
@@ -701,7 +864,6 @@ atari800top atari800top
 	.TAPE_FIFO_EMPTY(tape_fifo_empty),
 	.TAPE_PWM_CONFIG(status[66:64]),
 	.TAPE_PWM_INVERT(status[67]),
-	.TAPE_SOUND_EN(~status[68]),
 	.TAPE_RESET(tape_reset),
 	.TAPE_ACTIVE(tape_active),
 
@@ -715,6 +877,7 @@ atari800top atari800top
 
 	.PAL(pal_video),
 	.CLIP_SIDES(status[34]),
+	.GTIA_XCOLOR(status[114] & ~menu_vbxe),
 	.VGA_VS(VSync_o),
 	.VGA_HS(HSync_o),
 	.VGA_B(Bo),
@@ -730,17 +893,19 @@ atari800top atari800top
 	.CPU_SPEED(CPU_SPEEDS[status[9:7]]),
 	.RAM_SIZE(ram_config), 
 	.OS_MODE_800(mode800),
+	.OS_800_16K(os800_16k),
 	.PBI_MODE(modepbi),
 	.XEX_LOADER_MODE(xex_loader_mode),
 	.WARM_RESET_MENU(status[39]),
 	.COLD_RESET_MENU(status[40] | buttons[1]),
 	.RTC(rtc),
-	.VBXE_MODE({status[63],status[60],status[59]}),
+	.CLK_CONF(video_hz_config),
+	.VBXE_MODE({status[63],status[60:59]}),
 	.VBXE_PALETTE_RGB(vbxe_palette_rgb_out),
 	.VBXE_PALETTE_INDEX(vbxe_palette_index),
 	.VBXE_PALETTE_COLOR(vbxe_palette_color),
 
-	.STEREO(status[20]),
+	.POKEYMAX_CONFIG(pokeymax_config),
 	.AUDIO_L(laudio),
 	.AUDIO_R(raudio),
 
@@ -826,7 +991,7 @@ articolor articolor
 	.clk(CLK_VIDEO),
 	.ce_pix(ce_pix),
 	
-	.enable(status[5] & status[31] & ~status[59] & ~status[60]),
+	.enable(menu_ntsc & menu_artifacting & ~menu_vbxe),
 	.colorset(~status[55]),
 	.colorswap(status[58]),
 
@@ -867,6 +1032,8 @@ wire osab_rom_index = ioctl_index[7:0] == 8'b10000000 || ioctl_index[5:0] == 6;
 // boot3.rom (no menu index for this!)
 wire pbi_rom_index = ioctl_index[7:0] == 8'b11000000;
 wire turbofreezer_rom_index = ioctl_index[5:0] == 3;
+// sid_data.bin
+//wire siddata_rom_index = ioctl_index[5:0] == 7; // wire currently unused
 
 wire[25:0] rom_upload_addr;
 assign rom_upload_addr =
@@ -874,7 +1041,8 @@ assign rom_upload_addr =
 	(osab_rom_index ? {10'h270, 2'b10, ioctl_addr[13:0]} + 14'h1800 :
 	(basic_rom_index ? {10'h270, 3'b000, ioctl_addr[12:0]} :
 	(pbi_rom_index ? {10'h270, 3'b001, ioctl_addr[12:0]} : 
-	{10'h24A, ioctl_addr[15:0]}))); // Turbo Freezer
+	(turbofreezer_rom_index ? {10'h24A, ioctl_addr[15:0]} :
+	{9'b100111101, ioctl_addr[16:0]})))); // SID data, 128K
 
 wire cart1_rom_index = ioctl_index[5:0] == 8;
 wire cart2_rom_index = ioctl_index[5:0] == 9;
@@ -889,7 +1057,14 @@ assign cart2_upload_addr = {6'b101001, ioctl_addr[19:0]};
 
 assign cart_upload_addr = cart1_rom_index ? cart1_upload_addr : cart2_upload_addr;
 
+wire menu_mode800 = status[2];
+wire menu_pbibios = status[42];
+wire menu_ntsc = status[5];
+wire menu_artifacting = status[31];
+wire menu_vbxe = status[59] | status[60];
+
 reg mode800 = 0;
+reg os800_16k = 0;
 reg modepbi = 0;
 wire xex_loader_mode;
 reg splashpbi = 0;
@@ -897,21 +1072,28 @@ reg [7:0] drivesmodepbi = 0;
 reg [2:0] bootpbi = 0;
 reg [2:0] ram_config = 0;
 reg pal_video = 0;
+reg pal_hz = 0;
+reg [1:0] ntsc_hz = 0;
 
 wire [15:0] atari_status1;
 wire [15:0] atari_status2;
+wire [15:0] atari_status3;
 wire [2:0] atari_hotkeys;
-assign atari_status1 = {~status[38], 4'b0000, status[12:10], modepbi & ~xex_loader_mode, status[57], 1'b0, ~status[41], mode800, atari_hotkeys};
+assign atari_status1 = {~status[38], 4'b0000, status[12:10], modepbi & ~xex_loader_mode, status[57], os800_16k, ~status[41], mode800, atari_hotkeys};
 assign atari_status2 = {tape_fifo_full, tape_fifo_empty, tape_active, tape_slow, splashpbi, bootpbi, drivesmodepbi};
+assign atari_status3 = {13'b0000000000000, video_hz_config};
 
 always @(posedge clk_sys) if(areset) begin
-	mode800 <= status[2];
-	modepbi <= ~status[2] & status[42] & pbi_rom_loaded;
+	mode800 <= menu_mode800;
+	os800_16k <= status[110];
+	modepbi <= ~menu_mode800 & menu_pbibios & pbi_rom_loaded;
 	splashpbi <= status[43];
 	bootpbi <= status[54:52];
 	drivesmodepbi <= status[51:44];
-	ram_config <= (status[2] ? status[37:35] : status[15:13]);
-	pal_video <= ~status[5];
+	ram_config <= (menu_mode800 ? status[37:35] : status[15:13]);
+	pal_video <= ~menu_ntsc;
+	pal_hz <= status[113];
+	ntsc_hz <= status[112:111];
 end
 
 reg pbi_rom_loaded = 0;

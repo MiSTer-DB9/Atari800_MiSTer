@@ -22,6 +22,7 @@ PORT
 
 	PAL        : IN  STD_LOGIC;
 	CLIP_SIDES : IN  STD_LOGIC;
+	GTIA_XCOLOR : IN  STD_LOGIC := '0';
 	VGA_VS     : OUT STD_LOGIC;
 	VGA_HS     : OUT STD_LOGIC;
 	VGA_BLANK  : OUT STD_LOGIC;
@@ -36,7 +37,7 @@ PORT
 	HBLANK     : OUT STD_LOGIC;
 	VBLANK     : OUT STD_LOGIC;
 
-	STEREO     : IN  STD_LOGIC;
+	POKEYMAX_CONFIG : IN  STD_LOGIC_VECTOR(38 downto 0);
 	AUDIO_L    : OUT STD_LOGIC_VECTOR(15 downto 0);
 	AUDIO_R    : OUT STD_LOGIC_VECTOR(15 downto 0);
 
@@ -89,18 +90,19 @@ PORT
 	TAPE_PWM_INVERT : in std_logic; -- from status config
 	TAPE_RESET : in std_logic;
 	TAPE_ACTIVE : out std_logic;
-	TAPE_SOUND_EN : in std_logic;
 
 	PS2_KEY    : IN  STD_LOGIC_VECTOR(10 downto 0);
 
 	CPU_SPEED  : IN  STD_LOGIC_VECTOR(5 downto 0);
 	RAM_SIZE   : IN  STD_LOGIC_VECTOR(2 downto 0);
 	OS_MODE_800   : IN  STD_LOGIC;
+	OS_800_16K   : IN  STD_LOGIC;
 	PBI_MODE      : IN  STD_LOGIC;
 	XEX_LOADER_MODE : IN  STD_LOGIC;
 	WARM_RESET_MENU : IN STD_LOGIC;
 	COLD_RESET_MENU : IN STD_LOGIC;
 	RTC        : IN STD_LOGIC_VECTOR(64 downto 0);
+	CLK_CONF   : IN STD_LOGIC_VECTOR(2 downto 0);
 	VBXE_MODE  : IN STD_LOGIC_VECTOR(2 downto 0) := "000";
 	VBXE_PALETTE_RGB : IN STD_LOGIC_VECTOR(2 downto 0);
 	VBXE_PALETTE_INDEX : IN STD_LOGIC_VECTOR(7 downto 0);
@@ -295,15 +297,20 @@ begin
 
 			if cnt < 50000000 then
 				cnt := cnt + 1;
-				option_tmp <= option_tmp or SET_OPTION_FORCE_IN or JOY(5);
 				start_tmp <= start_tmp or SET_START_FORCE_IN;
 				space_tmp <= space_tmp or SET_SPACE_FORCE_IN;
 			else
 				tape_hold <= '0';
-				option_tmp <= '0';
 				start_tmp <= '0';
 				space_tmp <= '0';
 			end if;
+
+			if cnt < 25000000 then
+				option_tmp <= option_tmp or SET_OPTION_FORCE_IN or JOY(5);
+			else
+				option_tmp <= '0';
+			end if;
+
 			warm_reset_request <= not(reset_rnmi_atari) and (warm_reset_request or warm_reset_menu);
 			cold_reset_request <= cold_reset_request or cold_reset_menu;
 		end if;
@@ -386,7 +393,7 @@ PORT MAP
 	HBLANK => HBLANK,
 	VBLANK => VBLANK,
 
-	STEREO => STEREO,
+	POKEYMAX_CONFIG => POKEYMAX_CONFIG,
 	AUDIO_L => AUDIO_L,
 	AUDIO_R => AUDIO_R,
 
@@ -448,11 +455,14 @@ PORT MAP
 	RAM_SELECT => RAM_SIZE,
 	PAL => PAL,
 	CLIP_SIDES => CLIP_SIDES,
+	GTIA_XCOLOR => GTIA_XCOLOR,
 	RESET_RNMI => reset_rnmi_atari,
 	ATARI800MODE => OS_MODE_800,
+	ATARI800MODE_16K => OS_800_16K,
 	PBI_ROM_MODE => PBI_MODE,
 	XEX_LOADER_MODE => XEX_LOADER_MODE,
 	RTC => RTC,
+	CLK_CONF => CLK_CONF,
 	VBXE_SWITCH => VBXE_MODE(0) or VBXE_MODE(1),
 	VBXE_REG_BASE => VBXE_MODE(1),
 	VBXE_NTSC_FIX => VBXE_MODE(2),
@@ -590,7 +600,7 @@ PORT MAP
 	pwm_invert => TAPE_PWM_INVERT,
 	fsk_motor => tape_fsk_motor,
 	pwm_motor => tape_pwm_motor,
-	tape_sound_en => TAPE_SOUND_EN,
+	tape_sound_en => '1',
 	audio_out => tape_audio
 );
 
